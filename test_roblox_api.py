@@ -74,6 +74,18 @@ class RobloxCatalogClientTests(unittest.TestCase):
         self.assertEqual(result["price_type"], "Lowest resale price")
         self.assertIs(result["raw"], source)
 
+    def test_marks_creator_sale_as_available(self):
+        result = normalize_catalog_item({"id": 9, "price": 50, "isForSale": True})
+        self.assertTrue(result["is_for_sale"])
+
+    def test_marks_reseller_only_item_as_available(self):
+        result = normalize_catalog_item({"id": 10, "hasResellers": True})
+        self.assertTrue(result["is_for_sale"])
+
+    def test_excludes_item_with_no_sale_or_resellers(self):
+        result = normalize_catalog_item({"id": 11, "price": None, "hasResellers": False, "isForSale": False})
+        self.assertFalse(result["is_for_sale"])
+
     def test_catalog_price_is_not_mislabeled_as_resale(self):
         result = normalize_catalog_item({"id": 8, "name": "Catalog item", "price": 6500})
         self.assertEqual(result["display_price"], 6500)
