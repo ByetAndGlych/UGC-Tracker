@@ -7,12 +7,11 @@ from __future__ import annotations
 
 import time
 from typing import Any
-from urllib.parse import urljoin
 
 import requests
 
 
-CATALOG_SEARCH_URL = "https://catalog.roblox.com/v1/search/items/details"
+CATALOG_SEARCH_URL = "https://catalog.roblox.com/v2/search/items/details"
 DEFAULT_TIMEOUT = 20
 MAX_RETRIES = 4
 
@@ -86,11 +85,11 @@ class RobloxCatalogClient:
     ) -> list[dict[str, Any]]:
         """Search collectible catalog items; returns raw item dictionaries.
 
-        Roblox currently documents limits of 10, 28, or 30 for this endpoint.
-        Pagination uses nextPageCursor returned by Roblox.
+        The v2 endpoint uses CategoryFilter=2 for Collectibles and supports
+        limits of 10, 28, 30, 60, or 120. Pagination uses nextPageCursor.
         """
-        if limit not in (10, 28, 30):
-            raise ValueError("limit must be 10, 28, or 30")
+        if limit not in (10, 28, 30, 60, 120):
+            raise ValueError("limit must be 10, 28, 30, 60, or 120")
         if max_pages < 1:
             raise ValueError("max_pages must be at least 1")
 
@@ -99,14 +98,15 @@ class RobloxCatalogClient:
 
         for _ in range(max_pages):
             params: dict[str, Any] = {
-                "Category": 2,  # Collectibles
+                "CategoryFilter": 2,  # Collectibles
+                "SalesTypeFilter": 2,  # Collectible resale items
                 "SortType": sort_type,
-                "Limit": limit,
+                "limit": limit,
             }
             if keyword.strip():
                 params["Keyword"] = keyword.strip()
             if cursor:
-                params["Cursor"] = cursor
+                params["cursor"] = cursor
 
             payload = self._get_json(CATALOG_SEARCH_URL, params)
             page_items = payload.get("data", [])
