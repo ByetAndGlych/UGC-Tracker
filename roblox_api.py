@@ -117,6 +117,28 @@ class RobloxCatalogClient:
                 break
         return items
 
+    def search_collectibles_page(
+        self, cursor: str | None = None, limit: int = 120, keyword: str = "", sort_type: int = 0
+    ) -> dict[str, Any]:
+        """Fetch one catalog page and return its pagination cursor."""
+        if limit not in (10, 28, 30, 60, 120):
+            raise ValueError("limit must be 10, 28, 30, 60, or 120")
+        params: dict[str, Any] = {
+            "CategoryFilter": 2, "SalesTypeFilter": 1, "SortType": sort_type, "limit": limit
+        }
+        if keyword.strip():
+            params["Keyword"] = keyword.strip()
+        if cursor:
+            params["cursor"] = cursor
+        payload = self._get_json(CATALOG_SEARCH_URL, params)
+        page_items = payload.get("data", [])
+        if not isinstance(page_items, list):
+            raise RobloxAPIError("Catalog response did not contain an item list in 'data'.")
+        return {
+            "data": [item for item in page_items if isinstance(item, dict)],
+            "nextPageCursor": payload.get("nextPageCursor"),
+        }
+
     def get_resale_data(self, asset_id: int, collectible_item_id: str | None = None) -> dict[str, Any]:
         """Fetch resale data, preferring the modern collectible-ID endpoint."""
         if collectible_item_id:
