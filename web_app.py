@@ -124,6 +124,7 @@ class GalleryHandler(BaseHTTPRequestHandler):
                     self.item_cache[int(item["id"])] = item
                 except (TypeError, ValueError):
                     pass
+            # Do not display a search result once its known RAP proves it is overpriced.
             thumbnails = self.client.get_asset_thumbnails(
                 [item["id"] for item in items if item.get("id")]
             )
