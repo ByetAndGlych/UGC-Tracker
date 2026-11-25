@@ -130,7 +130,7 @@ class GalleryHandler(BaseHTTPRequestHandler):
                 except (RobloxAPIError, TypeError, ValueError):
                     return int(item.get("id") or 0), None
 
-            with ThreadPoolExecutor(max_workers=12) as pool:
+            with ThreadPoolExecutor(max_workers=3) as pool:
                 rap_results = list(pool.map(fetch_rap, items))
             rap_by_id = dict(rap_results)
             items = [
