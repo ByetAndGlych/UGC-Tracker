@@ -46,16 +46,26 @@ class GalleryHandler(BaseHTTPRequestHandler):
                     "rap": item.get("rap"), "sales": None, "stock": None, "remaining": None,
                     "price_history": [], "volume_history": [], "resellers": [],
                 }
+                # Roblox's collectible resale-data endpoint supplies RAP/history,
+                # but lifetime sales and stock are exposed by economy v2 asset details.
                 try:
                     resale = self.client.get_resale_data(
                         asset_id, item.get("collectible_item_id")
                     )
                     detail["rap"] = resale.get("recentAveragePrice") or detail["rap"]
-                    detail["sales"] = resale.get("sales")
-                    detail["stock"] = resale.get("assetStock")
-                    detail["remaining"] = resale.get("numberRemaining")
                     detail["price_history"] = resale.get("priceDataPoints") or []
                     detail["volume_history"] = resale.get("volumeDataPoints") or []
+                except RobloxAPIError:
+                    pass
+                try:
+                    economy = self.client.get_asset_details(asset_id)
+                    collectible = economy.get("CollectiblesItemDetails") or {}
+                    detail["sales"] = economy.get("Sales")
+                    detail["remaining"] = economy.get("Remaining")
+                    detail["stock"] = (
+                        collectible.get("TotalQuantity")
+                        or economy.get("TotalQuantity")
+                    )
                 except RobloxAPIError:
                     pass
                 collectible_id = item.get("collectible_item_id")
