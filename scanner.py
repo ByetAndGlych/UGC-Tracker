@@ -224,15 +224,9 @@ class CatalogScanner:
         with self._connect() as db:
             rows = db.execute("SELECT payload FROM catalog_items").fetchall()
         items = [json.loads(row[0]) for row in rows]
-        # Show only Limited UGC with a known original release quantity of 1,000 or fewer.
-        items = [
-            item for item in items
-            if item.get("is_limited_unique") is True
-            and isinstance(item.get("total_quantity"), (int, float))
-            and 0 < item["total_quantity"] <= 1000
-        ]
         if keyword:
-            # Keep matching limited items even when Roblox has not supplied RAP yet.
+            # Keyword search is a catalog search, not a deal-only filter.
+            # Keep matching items even when Roblox has not supplied RAP yet.
             term = keyword.casefold()
             items = [item for item in items if term in str(item.get("name") or "").casefold()]
         else:
