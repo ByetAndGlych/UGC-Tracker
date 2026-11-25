@@ -58,6 +58,22 @@ class CatalogScanner:
     def _save_page(self, raw_items: list[dict], next_cursor: str | None):
         items = [normalize_catalog_item(raw) for raw in raw_items]
         items = [item for item in items if item.get("is_for_sale") and item.get("id")]
+        now = datetime.now().astimezone().isoformat()
+
+        # Save catalog data and advance the cursor BEFORE slower enrichment calls.
+        # This keeps the gallery populated even when Roblox's resale API is slow.
+        with self._connect() as db:
+            for item in items:
+                item["rap"] = None
+                item["thumbnail_url"] = None
+                item.pop("raw", None)
+                db.execute(
+                    "INSERT INTO catalog_items(id,payload,updated_at) VALUES (?,?,?) "
+                    "ON CONFLICT(id) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at",
+                    (str(item["id"]), json.dumps(item), now),
+                )
+            db.execute("UPDATE scanner_state SET value=? WHERE key='cursor'", (next_cursor or "",))
+            db.execute("UPDATE scanner_state SET value=? WHERE key='last_scan'", (now,))
 
         def fetch_rap(item):
             try:
@@ -69,21 +85,20 @@ class CatalogScanner:
 
         with ThreadPoolExecutor(max_workers=8) as pool:
             rap_values = dict(pool.map(fetch_rap, items)) if items else {}
-
         thumbnails = self.client.get_asset_thumbnails([int(item["id"]) for item in items])
-        now = datetime.now().astimezone().isoformat()
+
         with self._connect() as db:
             for item in items:
-                item["rap"] = rap_values.get(str(item["id"]))
-                item["thumbnail_url"] = thumbnails.get(int(item["id"]))
-                item.pop("raw", None)
+                row = db.execute("SELECT payload FROM catalog_items WHERE id=?", (str(item["id"]),)).fetchone()
+                if not row:
+                    continue
+                saved = json.loads(row[0])
+                saved["rap"] = rap_values.get(str(item["id"]))
+                saved["thumbnail_url"] = thumbnails.get(int(item["id"]))
                 db.execute(
-                    "INSERT INTO catalog_items(id,payload,updated_at) VALUES (?,?,?) "
-                    "ON CONFLICT(id) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at",
-                    (str(item["id"]), json.dumps(item), now),
+                    "UPDATE catalog_items SET payload=?, updated_at=? WHERE id=?",
+                    (json.dumps(saved), datetime.now().astimezone().isoformat(), str(item["id"])),
                 )
-            db.execute("UPDATE scanner_state SET value=? WHERE key='cursor'", (next_cursor or "",))
-            db.execute("UPDATE scanner_state SET value=? WHERE key='last_scan'", (now,))
 
     def run_forever(self):
         while not self.stop_event.is_set():
