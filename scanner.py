@@ -107,6 +107,14 @@ class CatalogScanner:
         with self._connect() as db:
             rows = db.execute("SELECT payload FROM catalog_items").fetchall()
         items = [json.loads(row[0]) for row in rows]
+        # Only show confirmed deals: a known lowest price strictly below RAP.
+        items = [
+            item for item in items
+            if isinstance(item.get("lowest_price"), (int, float))
+            and isinstance(item.get("rap"), (int, float))
+            and item["rap"] > 0
+            and 0 < item["lowest_price"] < item["rap"]
+        ]
         if keyword:
             term = keyword.casefold()
             items = [item for item in items if term in str(item.get("name") or "").casefold()]
