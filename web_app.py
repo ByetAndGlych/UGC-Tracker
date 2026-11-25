@@ -71,7 +71,7 @@ class GalleryHandler(BaseHTTPRequestHandler):
                 try:
                     economy = self.client.get_asset_details(asset_id)
                     collectible = economy.get("CollectiblesItemDetails") or {}
-                    if detail["sales"] is None:
+                    if economy.get("Sales") is not None:
                         detail["sales"] = economy.get("Sales")
                     if detail["remaining"] is None:
                         detail["remaining"] = economy.get("Remaining")
