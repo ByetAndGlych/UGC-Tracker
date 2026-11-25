@@ -19,31 +19,54 @@ RESELLERS_URL = "https://apis.roblox.com/marketplace-sales/v1/item"
 DEFAULT_TIMEOUT = 20
 MAX_RETRIES = 4
 
-# Share Roblox's rate-limit cooldown across scanner and live-search clients.
+# Cooldowns are isolated by Roblox API host so a resale 429 does not block
+# catalog and thumbnail traffic.
 _RATE_LIMIT_LOCK = threading.Lock()
-_RATE_LIMIT_UNTIL = 0.0
+_RATE_LIMIT_UNTIL: dict[str, float] = {}
+_RATE_LIMIT_STREAK: dict[str, int] = {}
 
 
-def _wait_for_rate_limit(max_wait: float | None = None) -> bool:
-    started = time.monotonic()
-    while True:
-        with _RATE_LIMIT_LOCK:
-            delay = _RATE_LIMIT_UNTIL - time.monotonic()
-        if delay <= 0:
-            return True
-        if max_wait is not None and time.monotonic() - started + delay > max_wait:
-            return False
-        time.sleep(min(delay, 5))
+def _host(url: str) -> str:
+    from urllib.parse import urlsplit
+    return urlsplit(url).netloc.lower()
 
 
-def _set_rate_limit(seconds: float) -> None:
-    global _RATE_LIMIT_UNTIL
+def _cooldown_left(host: str) -> float:
     with _RATE_LIMIT_LOCK:
-        _RATE_LIMIT_UNTIL = max(_RATE_LIMIT_UNTIL, time.monotonic() + seconds)
+        return max(0.0, _RATE_LIMIT_UNTIL.get(host, 0.0) - time.monotonic())
+
+
+def _set_rate_limit(host: str, retry_after: str | None = None) -> float:
+    with _RATE_LIMIT_LOCK:
+        streak = _RATE_LIMIT_STREAK.get(host, 0) + 1
+        _RATE_LIMIT_STREAK[host] = streak
+        try:
+            requested = float(retry_after) if retry_after else 0.0
+        except (TypeError, ValueError):
+            requested = 0.0
+        # Respect Roblox's Retry-After while applying bounded exponential
+        # backoff when the header is missing or asks for a shorter delay.
+        delay = min(120.0, max(requested, min(30.0 * (2 ** min(streak - 1, 2)), 120.0)))
+        _RATE_LIMIT_UNTIL[host] = max(_RATE_LIMIT_UNTIL.get(host, 0.0), time.monotonic() + delay)
+        return delay
+
+
+def _clear_rate_limit(host: str) -> None:
+    with _RATE_LIMIT_LOCK:
+        _RATE_LIMIT_STREAK[host] = 0
 
 
 class RobloxAPIError(RuntimeError):
     """Raised when Roblox returns an unusable API response."""
+
+    def __init__(self, message: str, status_code: int | None = None, retry_after: float | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.retry_after = retry_after
+
+
+class RobloxBusy(RobloxAPIError):
+    """A request was declined because waiting would exceed its budget."""
 
 
 class RobloxCatalogClient:
@@ -65,43 +88,88 @@ class RobloxCatalogClient:
             }
         )
 
-    def _get_json(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
+    def _get_json(
+        self,
+        url: str,
+        params: dict[str, Any],
+        deadline: float | None = None,
+    ) -> dict[str, Any]:
+        host = _host(url)
         for attempt in range(self.max_retries + 1):
-            if not _wait_for_rate_limit(self.max_rate_limit_wait):
-                raise RobloxAPIError("Roblox is rate-limiting requests. Please wait briefly and try again.")
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
+                raise RobloxBusy("Roblox request timed out waiting for its request budget.", retry_after=_cooldown_left(host))
+
+            cooldown = _cooldown_left(host)
+            if cooldown > 0:
+                if self.max_rate_limit_wait == 0 or (remaining is not None and cooldown >= remaining):
+                    raise RobloxBusy(
+                        "Roblox is rate-limiting this endpoint. Try again shortly.",
+                        status_code=429,
+                        retry_after=cooldown,
+                    )
+                wait_budget = cooldown if remaining is None else min(cooldown, remaining)
+                if self.max_rate_limit_wait is not None:
+                    wait_budget = min(wait_budget, self.max_rate_limit_wait)
+                if wait_budget < cooldown:
+                    raise RobloxBusy("Roblox endpoint is temporarily busy.", status_code=429, retry_after=cooldown)
+                time.sleep(wait_budget)
+                continue
+
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
+                raise RobloxBusy("Roblox request deadline exceeded.")
+            timeout = self.timeout if remaining is None else max(0.1, min(float(self.timeout), remaining))
             try:
-                response = self.session.get(url, params=params, timeout=self.timeout)
+                response = self.session.get(url, params=params, timeout=timeout)
             except requests.RequestException as exc:
                 if attempt >= self.max_retries:
                     raise RobloxAPIError(f"Network request failed: {exc}") from exc
-                time.sleep(min(2 ** attempt, 8))
+                delay = min(2 ** attempt, 8)
+                if deadline is not None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= delay:
+                        raise RobloxBusy("Roblox request deadline exceeded.") from exc
+                    delay = min(delay, remaining)
+                time.sleep(delay)
                 continue
 
-            if response.status_code == 429 or 500 <= response.status_code < 600:
-                if response.status_code == 429:
-                    retry_after = response.headers.get("Retry-After")
-                    try:
-                        cooldown = min(float(retry_after), 120) if retry_after else 30.0
-                    except ValueError:
-                        cooldown = 30.0
-                    _set_rate_limit(cooldown)
+            if response.status_code == 429:
+                delay = _set_rate_limit(host, response.headers.get("Retry-After"))
+                # Web requests are fail-fast. Background callers may retry on
+                # the next loop, but never sleep and retry inside a web request.
+                if self.max_rate_limit_wait == 0 or deadline is not None:
+                    raise RobloxBusy(
+                        "Roblox is rate-limiting this endpoint. Try again shortly.",
+                        status_code=429,
+                        retry_after=delay,
+                    )
+                if attempt >= self.max_retries:
+                    raise RobloxAPIError("Roblox API remained rate-limited.", status_code=429, retry_after=delay)
+                continue
+
+            if 500 <= response.status_code < 600:
                 if attempt >= self.max_retries:
                     raise RobloxAPIError(
-                        f"Roblox API remained unavailable (HTTP {response.status_code})."
+                        f"Roblox API remained unavailable (HTTP {response.status_code}).",
+                        status_code=response.status_code,
                     )
-                retry_after = response.headers.get("Retry-After")
-                try:
-                    delay = min(float(retry_after), 120) if retry_after else min(2 ** attempt, 8)
-                except ValueError:
-                    delay = min(2 ** attempt, 8)
+                delay = min(2 ** attempt, 8)
+                if deadline is not None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= delay:
+                        raise RobloxBusy("Roblox request deadline exceeded.", status_code=response.status_code)
+                    delay = min(delay, remaining)
                 time.sleep(delay)
                 continue
 
             if not response.ok:
                 raise RobloxAPIError(
-                    f"Roblox API returned HTTP {response.status_code}: {response.text[:300]}"
+                    f"Roblox API returned HTTP {response.status_code}: {response.text[:300]}",
+                    status_code=response.status_code,
                 )
 
+            _clear_rate_limit(host)
             try:
                 payload = response.json()
             except ValueError as exc:
@@ -174,22 +242,9 @@ class RobloxCatalogClient:
         }
 
     def get_resale_data(self, asset_id: int, collectible_item_id: str | None = None) -> dict[str, Any]:
-        """Fetch RAP through Roblox's current collectible endpoint when possible.
-
-        Catalog search responses do not always include collectibleItemId.
-        Resolve it through economy v2 before falling back to the legacy
-        asset resale endpoint (which can return null RAP for migrated items).
-        """
-        # Use the modern endpoint when the catalog supplied its collectible ID.
-        # Do not make a second economy-details request for every missing ID:
-        # that multiplies traffic and can trigger Roblox's rate limit.
+        """Fetch RAP from exactly one endpoint selected by item identifier."""
         if collectible_item_id:
-            data = self._get_json(f"{RESELLERS_URL}/{collectible_item_id}/resale-data", {})
-            rap = data.get("recentAveragePrice")
-            if isinstance(rap, (int, float)) and rap > 0:
-                return data
-
-        # Legacy limiteds and items without a collectible ID use asset ID.
+            return self._get_json(f"{RESELLERS_URL}/{collectible_item_id}/resale-data", {})
         return self._get_json(f"{ECONOMY_URL}/{int(asset_id)}/resale-data", {})
 
     def get_asset_details(self, asset_id: int) -> dict[str, Any]:
