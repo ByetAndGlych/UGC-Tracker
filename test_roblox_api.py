@@ -70,7 +70,14 @@ class RobloxCatalogClientTests(unittest.TestCase):
         self.assertEqual(result["creator_name"], "Maker")
         self.assertEqual(result["creator_id"], 9)
         self.assertEqual(result["lowest_price"], 123)
+        self.assertEqual(result["display_price"], 123)
+        self.assertEqual(result["price_type"], "Lowest resale price")
         self.assertIs(result["raw"], source)
+
+    def test_catalog_price_is_not_mislabeled_as_resale(self):
+        result = normalize_catalog_item({"id": 8, "name": "Catalog item", "price": 6500})
+        self.assertEqual(result["display_price"], 6500)
+        self.assertEqual(result["price_type"], "Catalog price (not confirmed resale)")
 
     def test_rejects_unsupported_limit(self):
         client = RobloxCatalogClient(session=Mock(headers={}))
