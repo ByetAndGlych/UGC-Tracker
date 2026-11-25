@@ -106,7 +106,13 @@ class GalleryHandler(BaseHTTPRequestHandler):
             search_client = RobloxCatalogClient(timeout=8, max_retries=0, max_rate_limit_wait=0)
             raw_items = search_client.search_collectibles(keyword=keyword, limit=limit)
             items = [normalize_catalog_item(item) for item in raw_items]
-            items = [item for item in items if item["is_for_sale"]]
+            items = [
+                item for item in items
+                if item["is_for_sale"]
+                and isinstance(item.get("total_quantity"), (int, float))
+                and not isinstance(item.get("total_quantity"), bool)
+                and 0 <= item["total_quantity"] <= 1000
+            ]
             # RAP is optional for keyword results. Keep matching catalog
             # items visible even if the resale endpoint is rate-limited or has
             # no RAP for a newer collectible.
