@@ -100,6 +100,18 @@ class RobloxCatalogClientTests(unittest.TestCase):
         self.assertEqual(result["recentAveragePrice"], 125)
         self.assertIn("economy.roblox.com/v1/assets/123/resale-data", session.get.call_args.args[0])
 
+    def test_resale_data_prefers_collectible_item_id_endpoint(self):
+        session = Mock()
+        session.headers = {}
+        session.get.return_value = FakeResponse({"recentAveragePrice": 125})
+        client = RobloxCatalogClient(session=session)
+        result = client.get_resale_data(123, "collectible-abc")
+        self.assertEqual(result["recentAveragePrice"], 125)
+        self.assertIn(
+            "marketplace-sales/v1/item/collectible-abc/resale-data",
+            session.get.call_args.args[0],
+        )
+
     def test_resellers_use_collectible_item_id(self):
         session = Mock()
         session.headers = {}
