@@ -17,5 +17,5 @@ jobs:
         run: python -m pip install -r requirements.txt
       - name: Run unit tests
         run: python -m unittest -v
-      - name: Smoke-test Roblox collectible catalog search
-        run: python app.py --limit 10 --pages 1
+      - name: Smoke-test Roblox catalog and thumbnails
+        run: python web_app.py --check
