@@ -113,20 +113,24 @@ class GalleryHandler(BaseHTTPRequestHandler):
                 payload = json.dumps({"items": items, "count": len(items), "source": "continuous-scanner"}).encode()
                 self._send(200, payload, "application/json; charset=utf-8")
                 return
-            raw_items = self.client.search_collectibles(keyword=keyword, limit=limit)
+            # Keyword search needs a short, bounded response time. The normal
+            # scanner client retries slowly for reliability; using it here can
+            # leave a phone search waiting for minutes when Roblox is slow.
+            search_client = RobloxCatalogClient(timeout=8, max_retries=0)
+            raw_items = search_client.search_collectibles(keyword=keyword, limit=limit)
             items = [normalize_catalog_item(item) for item in raw_items]
             items = [item for item in items if item["is_for_sale"]]
             # RAP must be confirmed before a search result can be displayed.
             def fetch_rap(item: dict) -> tuple[int, int | None]:
                 try:
                     asset_id = int(item["id"])
-                    resale = self.client.get_resale_data(asset_id, item.get("collectible_item_id"))
+                    resale = search_client.get_resale_data(asset_id, item.get("collectible_item_id"))
                     rap = resale.get("recentAveragePrice")
                     return asset_id, rap if isinstance(rap, (int, float)) and rap > 0 else None
                 except (RobloxAPIError, TypeError, ValueError):
                     return int(item.get("id") or 0), None
 
-            with ThreadPoolExecutor(max_workers=6) as pool:
+            with ThreadPoolExecutor(max_workers=12) as pool:
                 rap_results = list(pool.map(fetch_rap, items))
             rap_by_id = dict(rap_results)
             items = [
@@ -140,9 +144,13 @@ class GalleryHandler(BaseHTTPRequestHandler):
             for item in items:
                 item["rap"] = rap_by_id[int(item["id"])]
                 self.item_cache[int(item["id"])] = item
-            thumbnails = self.client.get_asset_thumbnails(
-                [item["id"] for item in items if item.get("id")]
-            )
+            try:
+                thumbnails = search_client.get_asset_thumbnails(
+                    [item["id"] for item in items if item.get("id")]
+                )
+            except RobloxAPIError:
+                # Thumbnails are optional; do not let them block search results.
+                thumbnails = {}
             for item in items:
                 item["thumbnail_url"] = thumbnails.get(item.get("id"))
                 item.pop("raw", None)
