@@ -1,24 +1,20 @@
-"""Background catalog scanner with Eastern-time sleep hours and SQLite progress."""
+"""Always-on background catalog scanner with SQLite progress."""
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, time as day_time
+from datetime import datetime
 import json
 import os
 from pathlib import Path
 import sqlite3
 import threading
 import time
-from zoneinfo import ZoneInfo
 
 from roblox_api import RobloxAPIError, RobloxCatalogClient, normalize_catalog_item
 
-EASTERN = ZoneInfo("America/New_York")
 DB_PATH = Path(os.environ.get("UGC_TRACKER_DB", "/tmp/ugc_tracker.sqlite3"))
 PAGE_SIZE = 120
 PAGE_PAUSE_SECONDS = 2
-SLEEP_START = day_time(3, 0)
-SLEEP_END = day_time(9, 0)
 
 
 class CatalogScanner:
@@ -59,10 +55,6 @@ class CatalogScanner:
             row = db.execute("SELECT value FROM scanner_state WHERE key=?", (key,)).fetchone()
             return row[0] if row else ""
 
-    def _is_sleep_time(self, now: datetime) -> bool:
-        current = now.astimezone(EASTERN).time().replace(tzinfo=None)
-        return current >= SLEEP_START or current < SLEEP_END
-
     def _save_page(self, raw_items: list[dict], next_cursor: str | None):
         items = [normalize_catalog_item(raw) for raw in raw_items]
         items = [item for item in items if item.get("is_for_sale") and item.get("id")]
@@ -79,7 +71,7 @@ class CatalogScanner:
             rap_values = dict(pool.map(fetch_rap, items)) if items else {}
 
         thumbnails = self.client.get_asset_thumbnails([int(item["id"]) for item in items])
-        now = datetime.now(EASTERN).isoformat()
+        now = datetime.now().astimezone().isoformat()
         with self._connect() as db:
             for item in items:
                 item["rap"] = rap_values.get(str(item["id"]))
@@ -95,12 +87,7 @@ class CatalogScanner:
 
     def run_forever(self):
         while not self.stop_event.is_set():
-            now = datetime.now(EASTERN)
-            if self._is_sleep_time(now):
-                self._state("status", "Sleeping — resumes at 9:00 AM Eastern")
-                self.stop_event.wait(60)
-                continue
-            self._state("status", "Scanning Roblox catalog")
+            self._state("status", "Scanning Roblox catalog — continuous mode")
             try:
                 cursor = self._state("cursor") or None
                 page = self.client.search_collectibles_page(cursor=cursor, limit=PAGE_SIZE)
@@ -138,6 +125,5 @@ class CatalogScanner:
             "status": self._state("status"),
             "items_scanned": count,
             "last_scan": self._state("last_scan") or None,
-            "timezone": "America/New_York",
-            "sleep_window": "3:00 AM–9:00 AM Eastern",
+            "scan_mode": "continuous — no scheduled sleep window",
         }
