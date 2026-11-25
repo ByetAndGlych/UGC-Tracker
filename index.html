@@ -111,5 +111,7 @@ document.getElementById('sort').addEventListener('change',render);
 document.getElementById('close-modal').addEventListener('click',()=>modal.close());
 modal.addEventListener('click',e=>{if(e.target===modal)modal.close();});
 load(true);
+// Refresh the visible scanner results while this page is open.
+setInterval(()=>{if(!document.getElementById('keyword').value.trim())load(true);},60000);
 </script>
 </body></html>
