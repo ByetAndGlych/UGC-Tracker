@@ -24,12 +24,15 @@ _RATE_LIMIT_LOCK = threading.Lock()
 _RATE_LIMIT_UNTIL = 0.0
 
 
-def _wait_for_rate_limit() -> None:
+def _wait_for_rate_limit(max_wait: float | None = None) -> bool:
+    started = time.monotonic()
     while True:
         with _RATE_LIMIT_LOCK:
             delay = _RATE_LIMIT_UNTIL - time.monotonic()
         if delay <= 0:
-            return
+            return True
+        if max_wait is not None and time.monotonic() - started + delay > max_wait:
+            return False
         time.sleep(min(delay, 5))
 
 
@@ -49,10 +52,12 @@ class RobloxCatalogClient:
         session: requests.Session | None = None,
         timeout: int = DEFAULT_TIMEOUT,
         max_retries: int = MAX_RETRIES,
+        max_rate_limit_wait: float | None = None,
     ) -> None:
         self.session = session or requests.Session()
         self.timeout = timeout
         self.max_retries = max_retries
+        self.max_rate_limit_wait = max_rate_limit_wait
         self.session.headers.update(
             {
                 "User-Agent": "UGC-Tracker/0.2 (read-only public catalog client)",
@@ -62,7 +67,8 @@ class RobloxCatalogClient:
 
     def _get_json(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
         for attempt in range(self.max_retries + 1):
-            _wait_for_rate_limit()
+            if not _wait_for_rate_limit(self.max_rate_limit_wait):
+                raise RobloxAPIError("Roblox is rate-limiting requests. Please wait briefly and try again.")
             try:
                 response = self.session.get(url, params=params, timeout=self.timeout)
             except requests.RequestException as exc:
