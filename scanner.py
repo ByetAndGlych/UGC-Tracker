@@ -220,19 +220,21 @@ class CatalogScanner:
         with self._connect() as db:
             rows = db.execute("SELECT payload FROM catalog_items").fetchall()
         items = [json.loads(row[0]) for row in rows]
-        # Only show items with a known RAP, a known price, and a non-zero discount.
-        # Hide above-RAP, equal-to-RAP (0.0%), and missing-RAP items.
-        items = [
-            item for item in items
-            if isinstance(item.get("lowest_price"), (int, float))
-            and isinstance(item.get("rap"), (int, float))
-            and item["rap"] > 0
-            and 0 < item["lowest_price"] < item["rap"]
-            and round((1 - item["lowest_price"] / item["rap"]) * 100, 1) > 0
-        ]
         if keyword:
+            # Keyword search is a catalog search, not a deal-only filter.
+            # Keep matching items even when Roblox has not supplied RAP yet.
             term = keyword.casefold()
             items = [item for item in items if term in str(item.get("name") or "").casefold()]
+        else:
+            # The main gallery shows confirmed deals only.
+            items = [
+                item for item in items
+                if isinstance(item.get("lowest_price"), (int, float))
+                and isinstance(item.get("rap"), (int, float))
+                and item["rap"] > 0
+                and 0 < item["lowest_price"] < item["rap"]
+                and round((1 - item["lowest_price"] / item["rap"]) * 100, 1) > 0
+            ]
         items.sort(
             key=lambda item: (
                 -((1 - float(item.get("lowest_price") or 0) / float(item.get("rap") or 0)) * 100)
