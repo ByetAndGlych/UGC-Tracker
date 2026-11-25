@@ -6,6 +6,7 @@ endpoints are intentionally separate until their current behavior is verified.
 from __future__ import annotations
 
 import time
+import threading
 from typing import Any
 
 import requests
@@ -17,6 +18,25 @@ ECONOMY_URL = "https://economy.roblox.com/v1/assets"
 RESELLERS_URL = "https://apis.roblox.com/marketplace-sales/v1/item"
 DEFAULT_TIMEOUT = 20
 MAX_RETRIES = 4
+
+# Share Roblox's rate-limit cooldown across scanner and live-search clients.
+_RATE_LIMIT_LOCK = threading.Lock()
+_RATE_LIMIT_UNTIL = 0.0
+
+
+def _wait_for_rate_limit() -> None:
+    while True:
+        with _RATE_LIMIT_LOCK:
+            delay = _RATE_LIMIT_UNTIL - time.monotonic()
+        if delay <= 0:
+            return
+        time.sleep(min(delay, 5))
+
+
+def _set_rate_limit(seconds: float) -> None:
+    global _RATE_LIMIT_UNTIL
+    with _RATE_LIMIT_LOCK:
+        _RATE_LIMIT_UNTIL = max(_RATE_LIMIT_UNTIL, time.monotonic() + seconds)
 
 
 class RobloxAPIError(RuntimeError):
@@ -42,6 +62,7 @@ class RobloxCatalogClient:
 
     def _get_json(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
         for attempt in range(self.max_retries + 1):
+            _wait_for_rate_limit()
             try:
                 response = self.session.get(url, params=params, timeout=self.timeout)
             except requests.RequestException as exc:
@@ -51,13 +72,20 @@ class RobloxCatalogClient:
                 continue
 
             if response.status_code == 429 or 500 <= response.status_code < 600:
+                if response.status_code == 429:
+                    retry_after = response.headers.get("Retry-After")
+                    try:
+                        cooldown = min(float(retry_after), 120) if retry_after else 30.0
+                    except ValueError:
+                        cooldown = 30.0
+                    _set_rate_limit(cooldown)
                 if attempt >= self.max_retries:
                     raise RobloxAPIError(
                         f"Roblox API remained unavailable (HTTP {response.status_code})."
                     )
                 retry_after = response.headers.get("Retry-After")
                 try:
-                    delay = min(float(retry_after), 30) if retry_after else min(2 ** attempt, 8)
+                    delay = min(float(retry_after), 120) if retry_after else min(2 ** attempt, 8)
                 except ValueError:
                     delay = min(2 ** attempt, 8)
                 time.sleep(delay)
@@ -146,28 +174,16 @@ class RobloxCatalogClient:
         Resolve it through economy v2 before falling back to the legacy
         asset resale endpoint (which can return null RAP for migrated items).
         """
-        item_id = collectible_item_id
-        if not item_id:
-            try:
-                details = self.get_asset_details(int(asset_id))
-                item_id = details.get("CollectibleItemId") or details.get("collectibleItemId")
-                if not item_id:
-                    collectible_details = details.get("CollectiblesItemDetails") or {}
-                    if isinstance(collectible_details, dict):
-                        item_id = (
-                            collectible_details.get("CollectibleItemId")
-                            or collectible_details.get("collectibleItemId")
-                        )
-            except RobloxAPIError:
-                item_id = None
-
-        if item_id:
-            data = self._get_json(f"{RESELLERS_URL}/{item_id}/resale-data", {})
+        # Use the modern endpoint when the catalog supplied its collectible ID.
+        # Do not make a second economy-details request for every missing ID:
+        # that multiplies traffic and can trigger Roblox's rate limit.
+        if collectible_item_id:
+            data = self._get_json(f"{RESELLERS_URL}/{collectible_item_id}/resale-data", {})
             rap = data.get("recentAveragePrice")
             if isinstance(rap, (int, float)) and rap > 0:
                 return data
 
-        # Legacy limiteds may still use the asset-ID resale endpoint.
+        # Legacy limiteds and items without a collectible ID use asset ID.
         return self._get_json(f"{ECONOMY_URL}/{int(asset_id)}/resale-data", {})
 
     def get_asset_details(self, asset_id: int) -> dict[str, Any]:
