@@ -65,7 +65,7 @@ async function showDetails(item){
  document.getElementById('modal-title').textContent=item.name||'Item details';
  document.getElementById('modal-body').innerHTML='<p class="muted">Loading item details…</p>';modal.showModal();
  try{
-  const response=await fetch('/api/items/'+encodeURIComponent(item.id));const d=await response.json();if(!response.ok)throw new Error(d.error||'Could not load details');
+  const detailUrl='/api/items/'+encodeURIComponent(item.id)+'?item='+encodeURIComponent(JSON.stringify(item));const response=await fetch(detailUrl);const d=await response.json();if(!response.ok)throw new Error(d.error||'Could not load details');
   const x=d.item||{},rap=d.rap,discount=percentOff(x.lowest_price,rap),url=itemUrl(x.id);
   const soldTotal=Number.isFinite(Number(d.sales))&&Number.isFinite(Number(d.stock))&&Number(d.stock)>0?Number(d.sales).toLocaleString()+' / '+Number(d.stock).toLocaleString():'NA';
   const cells=[['Lowest price',robux(x.lowest_price)],['RAP',robux(rap)],['Discount vs RAP',discount],['Creator price',robux(x.creator_price)],['Lowest resale',robux(x.resale_price)],['Copies sold (sold / total)',soldTotal],['Original price',robux(x.raw?.originalPrice)],['Copies remaining',d.remaining??'NA']];
