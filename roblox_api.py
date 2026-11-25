@@ -13,6 +13,8 @@ import requests
 
 CATALOG_SEARCH_URL = "https://catalog.roblox.com/v2/search/items/details"
 THUMBNAILS_URL = "https://thumbnails.roblox.com/v1/assets"
+ECONOMY_URL = "https://economy.roblox.com/v1/assets"
+RESELLERS_URL = "https://apis.roblox.com/marketplace-sales/v1/item"
 DEFAULT_TIMEOUT = 20
 MAX_RETRIES = 4
 
@@ -115,6 +117,19 @@ class RobloxCatalogClient:
                 break
         return items
 
+    def get_resale_data(self, asset_id: int) -> dict[str, Any]:
+        """Fetch public RAP and 180-day resale history for a limited asset."""
+        return self._get_json(f"{ECONOMY_URL}/{int(asset_id)}/resale-data", {})
+
+    def get_resellers(self, collectible_item_id: str, limit: int = 10) -> dict[str, Any]:
+        """Fetch currently listed copies for a collectible item."""
+        if not collectible_item_id:
+            return {"data": []}
+        return self._get_json(
+            f"{RESELLERS_URL}/{collectible_item_id}/resellers",
+            {"limit": limit},
+        )
+
     def get_asset_thumbnails(self, asset_ids: list[int]) -> dict[int, str]:
         """Return Roblox thumbnail URLs keyed by asset ID."""
         ids = [int(asset_id) for asset_id in asset_ids if asset_id]
@@ -167,6 +182,14 @@ def normalize_catalog_item(item: dict[str, Any]) -> dict[str, Any]:
         display_price, price_type = catalog_price, "Catalog price (not confirmed resale)"
     else:
         display_price, price_type = None, "No current price"
+    creator_available = item.get("isForSale") is True and isinstance(catalog_price, (int, float)) and catalog_price > 0
+    resale_candidates = [
+        value for value in (lowest_resale, lowest_limited)
+        if isinstance(value, (int, float)) and value > 0
+    ]
+    if creator_available:
+        resale_candidates.append(catalog_price)
+    lowest_available = min(resale_candidates) if resale_candidates else None
     return {
         "id": item.get("id"),
         "name": item.get("name"),
@@ -176,7 +199,7 @@ def normalize_catalog_item(item: dict[str, Any]) -> dict[str, Any]:
         "price": catalog_price,
         "creator_price": catalog_price,
         "resale_price": lowest_resale or lowest_limited,
-        "lowest_price": lowest_resale or lowest_limited,
+        "lowest_price": lowest_available,
         "display_price": display_price,
         "price_type": price_type,
         "is_limited": item.get("isLimited"),
