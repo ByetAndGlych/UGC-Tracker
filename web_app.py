@@ -44,6 +44,7 @@ class GalleryHandler(BaseHTTPRequestHandler):
                 raise ValueError
             raw_items = self.client.search_collectibles(keyword=keyword, limit=limit)
             items = [normalize_catalog_item(item) for item in raw_items]
+            items = [item for item in items if item["is_for_sale"]]
             thumbnails = self.client.get_asset_thumbnails(
                 [item["id"] for item in items if item.get("id")]
             )
