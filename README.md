@@ -7,7 +7,7 @@ A standalone Roblox Limited UGC price-tracking and deal-detection project.
 The project now includes a phone-friendly web gallery that searches Roblox collectible items and loads their real thumbnails through Roblox's public Thumbnails API.
 
 - Continuously scans Roblox's public collectible catalog in 120-item pages, without requiring a search keyword.
-- Runs from 9:00 AM to 3:00 AM Eastern and sleeps from 3:00 AM to 9:00 AM Eastern; pagination progress and collected items are stored in SQLite while the service filesystem persists.
+- Scans continuously with no scheduled sleep window; pagination progress and collected items are stored in SQLite while the service filesystem persists.
 - Retrieves RAP in parallel for each scanned page and ranks cached items by best deal versus RAP.
 - Search by item name.
 - Choose 10, 30, 60, or 120 results.
@@ -36,7 +36,7 @@ python -m unittest -v
 ## Current limitations
 
 - Roblox's public RAP endpoint can return no RAP for newer CollectibleItem-system limiteds; those items display NA.
-- Render's free web service can spin down when idle. The scanner only runs while the service process is awake; its SQLite database is on the ephemeral filesystem and can be lost on a restart or redeploy. Always-on scanning with durable progress requires an always-on worker and persistent storage.
+- The scanner has no scheduled sleep window, but Render's free web service can still spin down when idle. Truly uninterrupted scanning requires an always-on hosting plan; durable progress across restarts also requires persistent storage.
 - Public resale history and reseller listings may be unavailable for some items or temporarily rate-limited.
 - Some catalog items may not have a thumbnail or public creator field.
 - To open the gallery from a phone when the server is running elsewhere, it must be deployed to a public host. Hosting/deployment is a separate next step.
