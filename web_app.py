@@ -122,8 +122,9 @@ class GalleryHandler(BaseHTTPRequestHandler):
             # A keyword search should not trigger 120 RAP requests. Enrich a
             # small sample only; the background scanner fills the saved catalog.
             items = items[:12]
+            rap_candidates = [item for item in items if isinstance(item.get("lowest_price"), (int, float)) and item["lowest_price"] > 0]
             with ThreadPoolExecutor(max_workers=2) as pool:
-                rap_results = list(pool.map(fetch_rap, items))
+                rap_results = list(pool.map(fetch_rap, rap_candidates))
             rap_by_id = dict(rap_results)
             for item in items:
                 item["rap"] = rap_by_id.get(int(item["id"]))
