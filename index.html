@@ -36,19 +36,37 @@ dialog::backdrop{background:#000b}.modal-head{position:sticky;top:0;background:#
 <header><div class="wrap">
 <h1>UGC-Tracker</h1><div class="sub">Roblox collectible catalog · Live public data</div>
 <form class="controls" id="search"><input id="keyword" type="search" placeholder="Search items…" aria-label="Search items"><select id="limit" aria-label="Number of results"><option>10</option><option>30</option><option>60</option><option>120</option></select><button type="submit">Search</button></form>
+<div class="controls" style="margin-top:9px"><label for="sort" class="sub" style="align-self:center;white-space:nowrap">Sort by</label><select id="sort" aria-label="Sort items" style="flex:1"><option value="price-low">Lowest price</option><option value="price-high">Highest price</option><option value="deal">Best deal vs RAP</option><option value="rap">Highest RAP</option><option value="name">Name A–Z</option><option value="markup">Biggest markup vs RAP</option></select></div>
 </div></header>
 <main><div class="status" id="status">Loading collectible items…</div><section class="grid" id="items" aria-live="polite"></section></main>
 <dialog id="details"><div class="modal-head"><h2 id="modal-title">Item details</h2><button class="close" id="close-modal" type="button">Close</button></div><div class="detail-body" id="modal-body"></div></dialog>
 <script>
 const grid=document.getElementById('items'),status=document.getElementById('status'),modal=document.getElementById('details');
+let currentItems=[];
 function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function robux(value){return Number.isFinite(Number(value))&&Number(value)>0?'R$ '+Number(value).toLocaleString():'NA';}
 function percentOff(price,rap){if(!(Number(price)>0)||!(Number(rap)>0))return 'NA';const p=(1-Number(price)/Number(rap))*100;return p>=0?p.toFixed(1)+'% below RAP':Math.abs(p).toFixed(1)+'% above RAP';}
 function itemUrl(id){return Number(id)>0?'https://www.roblox.com/catalog/'+encodeURIComponent(id):'';}
-function render(data){
+function sortItems(items){
+ const mode=document.getElementById('sort').value;
+ const numeric=(v)=>Number.isFinite(Number(v))&&v!==null&&v!==''?Number(v):null;
+ const deal=(item)=>{const p=numeric(item.lowest_price),r=numeric(item.rap);return p!==null&&r!==null&&r>0?(1-p/r)*100:null;};
+ return [...items].sort((a,b)=>{
+  const av=numeric(a.lowest_price),bv=numeric(b.lowest_price),ar=numeric(a.rap),br=numeric(b.rap);
+  if(mode==='price-low')return (av??Infinity)-(bv??Infinity);
+  if(mode==='price-high')return (bv??-Infinity)-(av??-Infinity);
+  if(mode==='rap')return (br??-Infinity)-(ar??-Infinity);
+  if(mode==='name')return String(a.name||'').localeCompare(String(b.name||''));
+  if(mode==='deal')return (deal(b)??-Infinity)-(deal(a)??-Infinity);
+  if(mode==='markup')return (deal(a)??Infinity)-(deal(b)??Infinity);
+  return 0;
+ });
+}
+function render(){
  grid.innerHTML='';
- if(!data.items.length){grid.innerHTML='<div class="empty">No items found. Try another search.</div>';return;}
- for(const item of data.items){
+ const items=sortItems(currentItems);
+ if(!items.length){grid.innerHTML='<div class="empty">No items found. Try another search.</div>';return;}
+ for(const item of items){
   const card=document.createElement('article');card.className='item';
   const image=item.thumbnail_url?'<img loading="lazy" src="'+esc(item.thumbnail_url)+'" alt="'+esc(item.name)+'">':'<span class="placeholder">Thumbnail unavailable</span>';
   const price=item.lowest_price;
@@ -82,10 +100,11 @@ async function showDetails(item){
 async function load(){
  status.textContent='Contacting Roblox…';grid.innerHTML='';
  const params=new URLSearchParams({keyword:document.getElementById('keyword').value,limit:document.getElementById('limit').value});
- try{const response=await fetch('/api/items?'+params);const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not load items');render(data);status.textContent='Showing '+data.count+' live catalog item(s).';}
+ try{const response=await fetch('/api/items?'+params);const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not load items');currentItems=data.items||[];render();status.textContent='Showing '+data.count+' live catalog item(s).';}
  catch(error){status.textContent='Could not load the catalog: '+error.message;grid.innerHTML='<div class="empty">Try again in a moment.</div>';}
 }
 document.getElementById('search').addEventListener('submit',event=>{event.preventDefault();load();});
+document.getElementById('sort').addEventListener('change',render);
 document.getElementById('close-modal').addEventListener('click',()=>modal.close());
 modal.addEventListener('click',e=>{if(e.target===modal)modal.close();});
 load();
