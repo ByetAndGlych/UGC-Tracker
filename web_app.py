@@ -15,6 +15,7 @@ ROOT = Path(__file__).parent
 
 class GalleryHandler(BaseHTTPRequestHandler):
     client = RobloxCatalogClient()
+    item_cache: dict[int, dict] = {}
 
     def _send(self, status: int, body: bytes, content_type: str) -> None:
         self.send_response(status)
@@ -32,6 +33,40 @@ class GalleryHandler(BaseHTTPRequestHandler):
         if parsed.path == "/":
             self._send(200, (ROOT / "index.html").read_bytes(), "text/html; charset=utf-8")
             return
+        if parsed.path.startswith("/api/items/"):
+            try:
+                asset_id = int(parsed.path.rsplit("/", 1)[-1])
+                item = self.item_cache.get(asset_id)
+                if not item:
+                    self._send(404, b'{"error":"Search for the item first, then open it."}', "application/json")
+                    return
+                detail = {
+                    "item": {key: value for key, value in item.items() if key != "raw"},
+                    "rap": None, "sales": None, "stock": None, "remaining": None,
+                    "price_history": [], "volume_history": [], "resellers": [],
+                }
+                try:
+                    resale = self.client.get_resale_data(asset_id)
+                    detail["rap"] = resale.get("recentAveragePrice")
+                    detail["sales"] = resale.get("sales")
+                    detail["stock"] = resale.get("assetStock")
+                    detail["remaining"] = resale.get("numberRemaining")
+                    detail["price_history"] = resale.get("priceDataPoints") or []
+                    detail["volume_history"] = resale.get("volumeDataPoints") or []
+                except RobloxAPIError:
+                    pass
+                collectible_id = item.get("collectible_item_id")
+                if collectible_id:
+                    try:
+                        listing_data = self.client.get_resellers(str(collectible_id), limit=10)
+                        detail["resellers"] = listing_data.get("data") or []
+                    except RobloxAPIError:
+                        pass
+                self._send(200, json.dumps(detail).encode(), "application/json; charset=utf-8")
+            except ValueError:
+                self._send(400, b'{"error":"Invalid item ID."}', "application/json")
+            return
+
         if parsed.path != "/api/items":
             self._send(404, b"Not found", "text/plain; charset=utf-8")
             return
@@ -45,6 +80,11 @@ class GalleryHandler(BaseHTTPRequestHandler):
             raw_items = self.client.search_collectibles(keyword=keyword, limit=limit)
             items = [normalize_catalog_item(item) for item in raw_items]
             items = [item for item in items if item["is_for_sale"]]
+            for item in items:
+                try:
+                    self.item_cache[int(item["id"])] = item
+                except (TypeError, ValueError):
+                    pass
             thumbnails = self.client.get_asset_thumbnails(
                 [item["id"] for item in items if item.get("id")]
             )
