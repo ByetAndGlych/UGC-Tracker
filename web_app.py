@@ -116,15 +116,30 @@ class GalleryHandler(BaseHTTPRequestHandler):
             raw_items = self.client.search_collectibles(keyword=keyword, limit=limit)
             items = [normalize_catalog_item(item) for item in raw_items]
             items = [item for item in items if item["is_for_sale"]]
-            # Return catalog matches immediately; RAP is fetched when an item is opened.
-            # This avoids holding the entire search response while dozens of resale calls run.
-            for item in items:
-                item["rap"] = None
+            # RAP must be confirmed before a search result can be displayed.
+            def fetch_rap(item: dict) -> tuple[int, int | None]:
                 try:
-                    self.item_cache[int(item["id"])] = item
-                except (TypeError, ValueError):
-                    pass
-            # Do not display a search result once its known RAP proves it is overpriced.
+                    asset_id = int(item["id"])
+                    resale = self.client.get_resale_data(asset_id, item.get("collectible_item_id"))
+                    rap = resale.get("recentAveragePrice")
+                    return asset_id, rap if isinstance(rap, (int, float)) and rap > 0 else None
+                except (RobloxAPIError, TypeError, ValueError):
+                    return int(item.get("id") or 0), None
+
+            with ThreadPoolExecutor(max_workers=6) as pool:
+                rap_results = list(pool.map(fetch_rap, items))
+            rap_by_id = dict(rap_results)
+            items = [
+                item for item in items
+                if isinstance(item.get("lowest_price"), (int, float))
+                and isinstance(rap_by_id.get(int(item["id"])), (int, float))
+                and rap_by_id[int(item["id"])] > 0
+                and 0 < item["lowest_price"] < rap_by_id[int(item["id"])]
+                and round((1 - item["lowest_price"] / rap_by_id[int(item["id"])]) * 100, 1) > 0
+            ]
+            for item in items:
+                item["rap"] = rap_by_id[int(item["id"])]
+                self.item_cache[int(item["id"])] = item
             thumbnails = self.client.get_asset_thumbnails(
                 [item["id"] for item in items if item.get("id")]
             )
