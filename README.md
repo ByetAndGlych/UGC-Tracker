@@ -8,7 +8,9 @@ The project now includes a phone-friendly web gallery that searches Roblox colle
 
 - Search by item name.
 - Choose 10, 30, 60, or 120 results.
-- View item thumbnails, names, creators, and available price fields.
+- View compact item cards with thumbnail, name, lowest available price, percent below RAP, and a direct Roblox link.
+- Tap an item thumbnail or name to open detailed public information, including RAP, creator price, resale listings, sales/stock figures, and available price history.
+- Missing public data is displayed as NA rather than estimated.
 - Uses public read-only endpoints; no Roblox password or session cookie is needed.
 - The gallery is a small Python web server and does not require a paid framework.
 
@@ -30,7 +32,8 @@ python -m unittest -v
 
 ## Current limitations
 
-- The gallery displays catalog price fields when Roblox supplies them. It does not yet calculate RAP, verified resale comparisons, or price history.
+- Roblox's public RAP endpoint can return no RAP for newer CollectibleItem-system limiteds; those items display NA.
+- Public resale history and reseller listings may be unavailable for some items or temporarily rate-limited.
 - Some catalog items may not have a thumbnail or public creator field.
 - To open the gallery from a phone when the server is running elsewhere, it must be deployed to a public host. Hosting/deployment is a separate next step.
 
