@@ -24,10 +24,8 @@ class RobloxCatalogClientTests(unittest.TestCase):
         session.get.return_value = FakeResponse(
             {"data": [{"id": 123, "name": "Test Hat"}], "nextPageCursor": None}
         )
-
         client = RobloxCatalogClient(session=session)
         items = client.search_collectibles(keyword="hat", limit=10)
-
         self.assertEqual(items[0]["id"], 123)
         args, kwargs = session.get.call_args
         self.assertIn("/v2/search/items/details", args[0])
@@ -42,18 +40,36 @@ class RobloxCatalogClientTests(unittest.TestCase):
             FakeResponse({"data": [{"id": 1}], "nextPageCursor": "next"}),
             FakeResponse({"data": [{"id": 2}], "nextPageCursor": None}),
         ]
-
         client = RobloxCatalogClient(session=session)
         items = client.search_collectibles(limit=10, max_pages=2)
-
         self.assertEqual([item["id"] for item in items], [1, 2])
         self.assertEqual(session.get.call_args_list[1].kwargs["params"]["cursor"], "next")
 
-    def test_normalize_item_preserves_raw_payload(self):
-        source = {"id": 7, "name": "Hat", "creator": {"id": 9, "name": "Maker"}}
-        result = normalize_catalog_item(source)
+    def test_thumbnail_lookup_maps_asset_ids_to_urls(self):
+        session = Mock()
+        session.headers = {}
+        session.get.return_value = FakeResponse(
+            {"data": [{"targetId": 123, "imageUrl": "https://images.example/123.png"}]}
+        )
+        client = RobloxCatalogClient(session=session)
+        self.assertEqual(
+            client.get_asset_thumbnails([123]),
+            {123: "https://images.example/123.png"},
+        )
+        self.assertIn("thumbnails.roblox.com/v1/assets", session.get.call_args.args[0])
 
+    def test_normalize_item_uses_v2_creator_fields(self):
+        source = {
+            "id": 7,
+            "name": "Hat",
+            "creatorName": "Maker",
+            "creatorTargetId": 9,
+            "lowestResalePrice": 123,
+        }
+        result = normalize_catalog_item(source)
         self.assertEqual(result["creator_name"], "Maker")
+        self.assertEqual(result["creator_id"], 9)
+        self.assertEqual(result["lowest_price"], 123)
         self.assertIs(result["raw"], source)
 
     def test_rejects_unsupported_limit(self):
