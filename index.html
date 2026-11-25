@@ -36,7 +36,7 @@ dialog::backdrop{background:#000b}.modal-head{position:sticky;top:0;background:#
 <header><div class="wrap">
 <h1>UGC-Tracker</h1><div class="sub">Roblox collectible catalog · Live public data</div>
 <form class="controls" id="search"><input id="keyword" type="search" placeholder="Search items…" aria-label="Search items"><select id="limit" aria-label="Number of results"><option>10</option><option>30</option><option>60</option><option>120</option></select><button type="submit">Search</button></form>
-<div class="controls" style="margin-top:9px"><label for="sort" class="sub" style="align-self:center;white-space:nowrap">Sort by</label><select id="sort" aria-label="Sort items" style="flex:1"><option value="price-low">Lowest price</option><option value="price-high">Highest price</option><option value="deal">Best deal vs RAP</option><option value="rap">Highest RAP</option><option value="name">Name A–Z</option><option value="markup">Biggest markup vs RAP</option></select></div>
+<div class="controls" style="margin-top:9px"><label for="sort" class="sub" style="align-self:center;white-space:nowrap">Sort by</label><select id="sort" aria-label="Sort items" style="flex:1"><option value="deal" selected>Best deal vs RAP</option><option value="price-low">Lowest price</option><option value="price-high">Highest price</option><option value="rap">Highest RAP</option><option value="name">Name A–Z</option><option value="markup">Biggest markup vs RAP</option></select></div>
 </div></header>
 <main><div class="status" id="status">Loading collectible items…</div><section class="grid" id="items" aria-live="polite"></section></main>
 <dialog id="details"><div class="modal-head"><h2 id="modal-title">Item details</h2><button class="close" id="close-modal" type="button">Close</button></div><div class="detail-body" id="modal-body"></div></dialog>
@@ -97,16 +97,19 @@ async function showDetails(item){
   document.getElementById('modal-body').innerHTML=html;
  }catch(e){document.getElementById('modal-body').innerHTML='<p class="muted">Could not load details: '+esc(e.message)+'</p>';}
 }
-async function load(){
+async function load(isAutomatic=false){
  status.textContent='Contacting Roblox…';grid.innerHTML='';
  const params=new URLSearchParams({keyword:document.getElementById('keyword').value,limit:document.getElementById('limit').value});
  try{const response=await fetch('/api/items?'+params);const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not load items');currentItems=data.items||[];render();status.textContent='Showing '+data.count+' live catalog item(s).';}
- catch(error){status.textContent='Could not load the catalog: '+error.message;grid.innerHTML='<div class="empty">Try again in a moment.</div>';}
+ catch(error){
+  if(isAutomatic){status.textContent='Roblox is taking a moment. Retrying…';setTimeout(()=>load(true),2500);return;}
+  status.textContent='Could not load the catalog: '+error.message;grid.innerHTML='<div class="empty">Try again in a moment.</div>';
+ }
 }
 document.getElementById('search').addEventListener('submit',event=>{event.preventDefault();load();});
 document.getElementById('sort').addEventListener('change',render);
 document.getElementById('close-modal').addEventListener('click',()=>modal.close());
 modal.addEventListener('click',e=>{if(e.target===modal)modal.close();});
-load();
+load(true);
 </script>
 </body></html>
