@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import Mock
 
-from roblox_api import RobloxCatalogClient, normalize_catalog_item
+from roblox_api import (RobloxAPIError, RobloxBusy, RobloxCatalogClient, normalize_catalog_item, _set_rate_limit, _cooldown_left, _RATE_LIMIT_LOCK, _RATE_LIMIT_UNTIL, _RATE_LIMIT_STREAK)
 
 
 class FakeResponse:
