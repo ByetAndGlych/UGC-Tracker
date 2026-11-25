@@ -152,6 +152,17 @@ def normalize_catalog_item(item: dict[str, Any]) -> dict[str, Any]:
     creator = item.get("creator") or {}
     if not isinstance(creator, dict):
         creator = {}
+    lowest_resale = item.get("lowestResalePrice")
+    lowest_limited = item.get("lowestPrice")
+    catalog_price = item.get("price")
+    if isinstance(lowest_resale, (int, float)) and lowest_resale > 0:
+        display_price, price_type = lowest_resale, "Lowest resale price"
+    elif isinstance(lowest_limited, (int, float)) and lowest_limited > 0:
+        display_price, price_type = lowest_limited, "Lowest resale price"
+    elif isinstance(catalog_price, (int, float)) and catalog_price > 0:
+        display_price, price_type = catalog_price, "Catalog price (not confirmed resale)"
+    else:
+        display_price, price_type = None, "No current price"
     return {
         "id": item.get("id"),
         "name": item.get("name"),
@@ -159,7 +170,9 @@ def normalize_catalog_item(item: dict[str, Any]) -> dict[str, Any]:
         "creator_name": creator.get("name") or item.get("creatorName"),
         "creator_id": creator.get("id") or item.get("creatorTargetId"),
         "price": item.get("price"),
-        "lowest_price": item.get("lowestResalePrice") or item.get("lowestPrice"),
+        "lowest_price": lowest_resale or lowest_limited,
+        "display_price": display_price,
+        "price_type": price_type,
         "is_limited": item.get("isLimited"),
         "is_limited_unique": item.get("isLimitedUnique"),
         "collectible_item_id": item.get("collectibleItemId"),
