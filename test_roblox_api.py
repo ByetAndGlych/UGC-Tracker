@@ -29,8 +29,8 @@ class RobloxCatalogClientTests(unittest.TestCase):
         self.assertEqual(items[0]["id"], 123)
         args, kwargs = session.get.call_args
         self.assertIn("/v2/search/items/details", args[0])
-        self.assertEqual(kwargs["params"]["CategoryFilter"], 2)
-        self.assertEqual(kwargs["params"]["SalesTypeFilter"], 1)
+        self.assertEqual(kwargs["params"]["CategoryFilter"], 0)
+        self.assertEqual(kwargs["params"]["SalesTypeFilter"], 2)
         self.assertEqual(kwargs["params"]["Keyword"], "hat")
 
     def test_pagination_uses_next_page_cursor(self):
