@@ -1,4 +1,4 @@
-"""Always-on background catalog scanner with SQLite progress."""
+"""Always-on background catalog scanner with durable database progress."""
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -6,10 +6,10 @@ from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path
-import sqlite3
 import threading
 import time
 
+from database import connect_database
 from roblox_api import RobloxAPIError, RobloxCatalogClient, normalize_catalog_item
 
 DB_PATH = Path(os.environ.get("UGC_TRACKER_DB", "/tmp/ugc_tracker.sqlite3"))
@@ -26,18 +26,15 @@ class CatalogScanner:
         self._init_db()
 
     def _connect(self):
-        connection = sqlite3.connect(self.db_path, timeout=30)
-        connection.execute("PRAGMA journal_mode=WAL")
-        return connection
+        return connect_database()
 
     def _init_db(self):
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as db:
             db.execute("CREATE TABLE IF NOT EXISTS scanner_state (key TEXT PRIMARY KEY, value TEXT)")
             db.execute("CREATE TABLE IF NOT EXISTS catalog_items (id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL)")
-            db.execute("INSERT OR IGNORE INTO scanner_state(key,value) VALUES ('cursor','')")
-            db.execute("INSERT OR IGNORE INTO scanner_state(key,value) VALUES ('status','Starting')")
-            db.execute("INSERT OR IGNORE INTO scanner_state(key,value) VALUES ('last_scan','')")
+            db.execute("INSERT INTO scanner_state(key,value) VALUES ('cursor','') ON CONFLICT(key) DO NOTHING")
+            db.execute("INSERT INTO scanner_state(key,value) VALUES ('status','Starting') ON CONFLICT(key) DO NOTHING")
+            db.execute("INSERT INTO scanner_state(key,value) VALUES ('last_scan','') ON CONFLICT(key) DO NOTHING")
 
     def start(self):
         if self.thread and self.thread.is_alive():
