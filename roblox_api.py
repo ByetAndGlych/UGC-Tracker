@@ -96,7 +96,7 @@ class RobloxCatalogClient:
         for _ in range(max_pages):
             params: dict[str, Any] = {
                 "CategoryFilter": 2,
-                "SalesTypeFilter": 2,
+                "SalesTypeFilter": 1,
                 "SortType": sort_type,
                 "limit": limit,
             }
