@@ -162,10 +162,53 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.check:
+        import time
+
         client = RobloxCatalogClient()
-        items = client.search_collectibles(limit=10)
-        thumbnails = client.get_asset_thumbnails([item.get("id") for item in items if item.get("id")])
-        print(f"Retrieved {len(items)} collectible items; received {len(thumbnails)} thumbnails.")
+        started = time.perf_counter()
+        cursor = None
+        seen_cursors = set()
+        seen_ids = set()
+        page_times = []
+        pages = 0
+        duplicates = 0
+        for page_number in range(1, 101):
+            page_started = time.perf_counter()
+            page = client.search_collectibles_page(cursor=cursor, limit=120)
+            elapsed = time.perf_counter() - page_started
+            page_times.append(elapsed)
+            pages += 1
+            page_items = page["data"]
+            for item in page_items:
+                item_id = item.get("id")
+                if item_id is not None:
+                    if str(item_id) in seen_ids:
+                        duplicates += 1
+                    seen_ids.add(str(item_id))
+            cursor = page.get("nextPageCursor")
+            print(
+                f"PAGE {page_number}: items={len(page_items)} "
+                f"seconds={elapsed:.2f} unique_total={len(seen_ids)} "
+                f"has_next={bool(cursor)}",
+                flush=True,
+            )
+            if not cursor:
+                print("PAGINATION_END: Roblox returned no nextPageCursor.", flush=True)
+                break
+            if cursor in seen_cursors:
+                print("PAGINATION_LOOP: Roblox repeated a cursor.", flush=True)
+                break
+            seen_cursors.add(cursor)
+        total = time.perf_counter() - started
+        average = total / pages if pages else 0
+        print(
+            f"BENCHMARK_RESULT pages={pages} unique_items={len(seen_ids)} "
+            f"duplicates={duplicates} elapsed_seconds={total:.2f} "
+            f"average_seconds_per_page={average:.2f} "
+            f"items_per_second={len(seen_ids) / total if total else 0:.2f} "
+            f"projected_100_pages_seconds={average * 100:.2f}",
+            flush=True,
+        )
         return
 
     SCANNER.start()
