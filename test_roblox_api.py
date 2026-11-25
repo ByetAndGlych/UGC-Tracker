@@ -91,6 +91,30 @@ class RobloxCatalogClientTests(unittest.TestCase):
         self.assertEqual(result["display_price"], 6500)
         self.assertEqual(result["price_type"], "Catalog price (not confirmed resale)")
 
+    def test_resale_data_uses_public_economy_endpoint(self):
+        session = Mock()
+        session.headers = {}
+        session.get.return_value = FakeResponse({"recentAveragePrice": 125, "sales": 8})
+        client = RobloxCatalogClient(session=session)
+        result = client.get_resale_data(123)
+        self.assertEqual(result["recentAveragePrice"], 125)
+        self.assertIn("economy.roblox.com/v1/assets/123/resale-data", session.get.call_args.args[0])
+
+    def test_resellers_use_collectible_item_id(self):
+        session = Mock()
+        session.headers = {}
+        session.get.return_value = FakeResponse({"data": [{"price": 90}]})
+        client = RobloxCatalogClient(session=session)
+        result = client.get_resellers("collectible-abc", limit=10)
+        self.assertEqual(result["data"][0]["price"], 90)
+        self.assertIn("marketplace-sales/v1/item/collectible-abc/resellers", session.get.call_args.args[0])
+
+    def test_lowest_price_uses_lower_creator_or_resale_price(self):
+        result = normalize_catalog_item({
+            "id": 12, "isForSale": True, "price": 100, "lowestResalePrice": 80
+        })
+        self.assertEqual(result["lowest_price"], 80)
+
     def test_rejects_unsupported_limit(self):
         client = RobloxCatalogClient(session=Mock(headers={}))
         with self.assertRaises(ValueError):
