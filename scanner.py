@@ -14,7 +14,7 @@ from roblox_api import RobloxAPIError, RobloxCatalogClient, normalize_catalog_it
 
 DB_PATH = Path(os.environ.get("UGC_TRACKER_DB", "/tmp/ugc_tracker.sqlite3"))
 PAGE_SIZE = 120
-PAGE_PAUSE_SECONDS = 2
+PAGE_PAUSE_SECONDS = 4
 
 
 class CatalogScanner:
@@ -94,7 +94,7 @@ class CatalogScanner:
 
         # Save every completed RAP lookup separately. An interruption only loses
         # the requests that were still running, not the whole page's enrichment.
-        with ThreadPoolExecutor(max_workers=8) as pool:
+        with ThreadPoolExecutor(max_workers=3) as pool:
             futures = {pool.submit(fetch_rap, item): item for item in rap_candidates}
             for future in as_completed(futures):
                 item = futures[future]
