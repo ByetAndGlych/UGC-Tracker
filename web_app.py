@@ -47,7 +47,9 @@ class GalleryHandler(BaseHTTPRequestHandler):
                     "price_history": [], "volume_history": [], "resellers": [],
                 }
                 try:
-                    resale = self.client.get_resale_data(asset_id)
+                    resale = self.client.get_resale_data(
+                        asset_id, item.get("collectible_item_id")
+                    )
                     detail["rap"] = resale.get("recentAveragePrice") or detail["rap"]
                     detail["sales"] = resale.get("sales")
                     detail["stock"] = resale.get("assetStock")
@@ -84,7 +86,9 @@ class GalleryHandler(BaseHTTPRequestHandler):
             def fetch_rap(item: dict) -> tuple[int, int | None]:
                 try:
                     asset_id = int(item["id"])
-                    resale = self.client.get_resale_data(asset_id)
+                    resale = self.client.get_resale_data(
+                        asset_id, item.get("collectible_item_id")
+                    )
                     rap = resale.get("recentAveragePrice")
                     return asset_id, rap if isinstance(rap, (int, float)) and rap > 0 else None
                 except (RobloxAPIError, TypeError, ValueError):
