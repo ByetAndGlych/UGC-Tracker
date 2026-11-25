@@ -112,6 +112,20 @@ class RobloxCatalogClientTests(unittest.TestCase):
             session.get.call_args.args[0],
         )
 
+    def test_asset_details_uses_economy_v2_endpoint(self):
+        session = Mock()
+        session.headers = {}
+        session.get.return_value = FakeResponse({
+            "Sales": 42,
+            "Remaining": 8,
+            "CollectiblesItemDetails": {"TotalQuantity": 50},
+        })
+        client = RobloxCatalogClient(session=session)
+        result = client.get_asset_details(123)
+        self.assertEqual(result["Sales"], 42)
+        self.assertEqual(result["Remaining"], 8)
+        self.assertIn("economy.roblox.com/v2/assets/123/details", session.get.call_args.args[0])
+
     def test_resellers_use_collectible_item_id(self):
         session = Mock()
         session.headers = {}
