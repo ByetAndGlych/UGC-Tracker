@@ -157,7 +157,7 @@ def normalize_catalog_item(item: dict[str, Any]) -> dict[str, Any]:
     catalog_price = item.get("price")
     has_resellers = item.get("hasResellers") is True
     is_for_sale = item.get("isForSale") is True or has_resellers or (
-        isinstance(catalog_price, (int, float)) and catalog_price >= 0
+        isinstance(catalog_price, (int, float)) and catalog_price > 0
     )
     if isinstance(lowest_resale, (int, float)) and lowest_resale > 0:
         display_price, price_type = lowest_resale, "Lowest resale price"
