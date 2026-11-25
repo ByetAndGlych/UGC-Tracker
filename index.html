@@ -39,8 +39,9 @@ function render(data){
  for(const item of data.items){
   const card=document.createElement('article');card.className='item';
   const image=item.thumbnail_url?'<img loading="lazy" src="'+esc(item.thumbnail_url)+'" alt="'+esc(item.name)+'">':'<span class="placeholder">Thumbnail unavailable</span>';
-  const price=Number.isFinite(item.display_price)&&item.display_price>0?'R$ '+item.display_price:'Not listed';
-  card.innerHTML='<div class="thumb">'+image+'</div><div class="info"><div class="name">'+esc(item.name||'Unnamed item')+'</div><div class="creator">'+esc(item.creator_name||'Creator not listed')+'</div><div class="price">'+esc(price)+'</div><div class="tag">'+esc(item.price_type||'Price source unknown')+'</div><div class="tag">'+(item.has_resellers?'Resellers available':'No reseller data')+'</div></div>';
+  const creatorPrice=Number.isFinite(item.creator_price)&&item.creator_price>0?'R$ '+item.creator_price:'Not currently for sale by creator';
+  const resalePrice=Number.isFinite(item.resale_price)&&item.resale_price>0?'R$ '+item.resale_price:'No resale listing';
+  card.innerHTML='<div class="thumb">'+image+'</div><div class="info"><div class="name">'+esc(item.name||'Unnamed item')+'</div><div class="creator">'+esc(item.creator_name||'Creator not listed')+'</div><div class="price">Creator price: '+esc(creatorPrice)+'</div><div class="price">Lowest resale: '+esc(resalePrice)+'</div><div class="tag">'+(item.has_resellers?'Resellers available':'No reseller data')+'</div></div>';
   grid.appendChild(card);
  }
 }
