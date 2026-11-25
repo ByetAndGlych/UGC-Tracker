@@ -39,8 +39,16 @@ class GalleryHandler(BaseHTTPRequestHandler):
                 asset_id = int(parsed.path.rsplit("/", 1)[-1])
                 item = self.item_cache.get(asset_id)
                 if not item:
-                    self._send(404, b'{"error":"Search for the item first, then open it."}', "application/json")
-                    return
+                    supplied = parse_qs(parsed.query).get("item", [""])[0]
+                    try:
+                        candidate = json.loads(supplied) if supplied else None
+                    except json.JSONDecodeError:
+                        candidate = None
+                    if isinstance(candidate, dict) and str(candidate.get("id")) == str(asset_id):
+                        item = candidate
+                    else:
+                        self._send(400, b'{"error":"Item details were not included. Run a new search and try again."}', "application/json")
+                        return
                 detail = {
                     "item": {key: value for key, value in item.items() if key != "raw"},
                     "rap": item.get("rap"), "sales": None, "stock": None, "remaining": None,
@@ -55,17 +63,22 @@ class GalleryHandler(BaseHTTPRequestHandler):
                     detail["rap"] = resale.get("recentAveragePrice") or detail["rap"]
                     detail["price_history"] = resale.get("priceDataPoints") or []
                     detail["volume_history"] = resale.get("volumeDataPoints") or []
+                    detail["sales"] = resale.get("sales")
+                    detail["stock"] = resale.get("assetStock")
+                    detail["remaining"] = resale.get("numberRemaining")
                 except RobloxAPIError:
                     pass
                 try:
                     economy = self.client.get_asset_details(asset_id)
                     collectible = economy.get("CollectiblesItemDetails") or {}
-                    detail["sales"] = economy.get("Sales")
-                    detail["remaining"] = economy.get("Remaining")
-                    detail["stock"] = (
-                        collectible.get("TotalQuantity")
-                        or economy.get("TotalQuantity")
-                    )
+                    if detail["sales"] is None:
+                        detail["sales"] = economy.get("Sales")
+                    if detail["remaining"] is None:
+                        detail["remaining"] = economy.get("Remaining")
+                    if detail["stock"] is None:
+                        detail["stock"] = collectible.get("TotalQuantity")
+                        if detail["stock"] is None:
+                            detail["stock"] = economy.get("TotalQuantity")
                 except RobloxAPIError:
                     pass
                 collectible_id = item.get("collectible_item_id")
