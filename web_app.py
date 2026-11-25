@@ -107,7 +107,9 @@ class GalleryHandler(BaseHTTPRequestHandler):
             raw_items = search_client.search_collectibles(keyword=keyword, limit=limit)
             items = [normalize_catalog_item(item) for item in raw_items]
             items = [item for item in items if item["is_for_sale"]]
-            # RAP must be confirmed before a search result can be displayed.
+            # RAP is optional for keyword results. Keep matching catalog
+            # items visible even if the resale endpoint is rate-limited or has
+            # no RAP for a newer collectible.
             def fetch_rap(item: dict) -> tuple[int, int | None]:
                 try:
                     asset_id = int(item["id"])
@@ -123,16 +125,8 @@ class GalleryHandler(BaseHTTPRequestHandler):
             with ThreadPoolExecutor(max_workers=2) as pool:
                 rap_results = list(pool.map(fetch_rap, items))
             rap_by_id = dict(rap_results)
-            items = [
-                item for item in items
-                if isinstance(item.get("lowest_price"), (int, float))
-                and isinstance(rap_by_id.get(int(item["id"])), (int, float))
-                and rap_by_id[int(item["id"])] > 0
-                and 0 < item["lowest_price"] < rap_by_id[int(item["id"])]
-                and round((1 - item["lowest_price"] / rap_by_id[int(item["id"])]) * 100, 1) > 0
-            ]
             for item in items:
-                item["rap"] = rap_by_id[int(item["id"])]
+                item["rap"] = rap_by_id.get(int(item["id"]))
                 self.item_cache[int(item["id"])] = item
             try:
                 thumbnails = search_client.get_asset_thumbnails(
