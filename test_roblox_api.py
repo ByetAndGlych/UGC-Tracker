@@ -45,6 +45,19 @@ class RobloxCatalogClientTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in items], [1, 2])
         self.assertEqual(session.get.call_args_list[1].kwargs["params"]["cursor"], "next")
 
+    def test_single_catalog_page_returns_next_cursor(self):
+        session = Mock()
+        session.headers = {}
+        session.get.return_value = FakeResponse({
+            "data": [{"id": 1}, {"id": 2}],
+            "nextPageCursor": "cursor-next",
+        })
+        client = RobloxCatalogClient(session=session)
+        page = client.search_collectibles_page(limit=120)
+        self.assertEqual([item["id"] for item in page["data"]], [1, 2])
+        self.assertEqual(page["nextPageCursor"], "cursor-next")
+        self.assertEqual(session.get.call_args.kwargs["params"]["limit"], 120)
+
     def test_thumbnail_lookup_maps_asset_ids_to_urls(self):
         session = Mock()
         session.headers = {}
