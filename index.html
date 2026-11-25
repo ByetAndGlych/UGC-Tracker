@@ -40,7 +40,7 @@ function render(data){
   const card=document.createElement('article');card.className='item';
   const image=item.thumbnail_url?'<img loading="lazy" src="'+esc(item.thumbnail_url)+'" alt="'+esc(item.name)+'">':'<span class="placeholder">Thumbnail unavailable</span>';
   const price=Number.isFinite(item.display_price)&&item.display_price>0?'R$ '+item.display_price:'Not listed';
-  card.innerHTML='<div class="thumb">'+image+'</div><div class="info"><div class="name">'+esc(item.name||'Unnamed item')+'</div><div class="creator">'+esc(item.creator_name||'Creator not listed')+'</div><div class="price">'+esc(price)+'</div><div class="tag">'+(item.has_resellers?'Resellers available':'No reseller data')+'</div></div>';
+  card.innerHTML='<div class="thumb">'+image+'</div><div class="info"><div class="name">'+esc(item.name||'Unnamed item')+'</div><div class="creator">'+esc(item.creator_name||'Creator not listed')+'</div><div class="price">'+esc(price)+'</div><div class="tag">'+esc(item.price_type||'Price source unknown')+'</div><div class="tag">'+(item.has_resellers?'Resellers available':'No reseller data')+'</div></div>';
   grid.appendChild(card);
  }
 }
