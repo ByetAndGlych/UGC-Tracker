@@ -54,45 +54,21 @@ class GalleryHandler(BaseHTTPRequestHandler):
                     else:
                         self._send(400, b'{"error":"Item details were not included. Run a new search and try again."}', "application/json")
                         return
+                # Return the details already known by the card immediately.
+                # Do not make several live Roblox calls while the modal is open:
+                # Roblox rate limits those endpoints and can leave the dialog
+                # stuck on "Loading item details..." for a long time.
                 detail = {
                     "item": {key: value for key, value in item.items() if key != "raw"},
-                    "rap": item.get("rap"), "sales": None, "stock": None, "remaining": None,
-                    "price_history": [], "volume_history": [], "resellers": [],
+                    "rap": item.get("rap"),
+                    "sales": None,
+                    "stock": None,
+                    "remaining": None,
+                    "price_history": [],
+                    "volume_history": [],
+                    "resellers": [],
+                    "live_details_status": "Live resale details are temporarily unavailable; showing saved catalog data.",
                 }
-                # Roblox's collectible resale-data endpoint supplies RAP/history,
-                # but lifetime sales and stock are exposed by economy v2 asset details.
-                try:
-                    resale = self.client.get_resale_data(
-                        asset_id, item.get("collectible_item_id")
-                    )
-                    detail["rap"] = resale.get("recentAveragePrice") or detail["rap"]
-                    detail["price_history"] = resale.get("priceDataPoints") or []
-                    detail["volume_history"] = resale.get("volumeDataPoints") or []
-                    detail["sales"] = resale.get("sales")
-                    detail["stock"] = resale.get("assetStock")
-                    detail["remaining"] = resale.get("numberRemaining")
-                except RobloxAPIError:
-                    pass
-                try:
-                    economy = self.client.get_asset_details(asset_id)
-                    collectible = economy.get("CollectiblesItemDetails") or {}
-                    if economy.get("Sales") is not None:
-                        detail["sales"] = economy.get("Sales")
-                    if detail["remaining"] is None:
-                        detail["remaining"] = economy.get("Remaining")
-                    if detail["stock"] is None:
-                        detail["stock"] = collectible.get("TotalQuantity")
-                        if detail["stock"] is None:
-                            detail["stock"] = economy.get("TotalQuantity")
-                except RobloxAPIError:
-                    pass
-                collectible_id = item.get("collectible_item_id")
-                if collectible_id:
-                    try:
-                        listing_data = self.client.get_resellers(str(collectible_id), limit=10)
-                        detail["resellers"] = listing_data.get("data") or []
-                    except RobloxAPIError:
-                        pass
                 self._send(200, json.dumps(detail).encode(), "application/json; charset=utf-8")
             except ValueError:
                 self._send(400, b'{"error":"Invalid item ID."}', "application/json")
