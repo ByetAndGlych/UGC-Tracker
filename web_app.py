@@ -89,10 +89,21 @@ class GalleryHandler(BaseHTTPRequestHandler):
                 payload = json.dumps({"items": items, "count": len(items), "source": "continuous-scanner"}).encode()
                 self._send(200, payload, "application/json; charset=utf-8")
                 return
+
+            # Search the saved catalog first. This needs no Roblox requests and
+            # still works while Roblox is rate-limiting the live API.
+            cached_items = SCANNER.get_items(keyword=keyword, limit=limit)
+            if cached_items:
+                payload = json.dumps({
+                    "items": cached_items, "count": len(cached_items),
+                    "source": "saved-catalog"
+                }).encode()
+                self._send(200, payload, "application/json; charset=utf-8")
+                return
             # Keyword search needs a short, bounded response time. The normal
             # scanner client retries slowly for reliability; using it here can
             # leave a phone search waiting for minutes when Roblox is slow.
-            search_client = RobloxCatalogClient(timeout=8, max_retries=0)
+            search_client = RobloxCatalogClient(timeout=8, max_retries=0, max_rate_limit_wait=0)
             raw_items = search_client.search_collectibles(keyword=keyword, limit=limit)
             items = [normalize_catalog_item(item) for item in raw_items]
             items = [item for item in items if item["is_for_sale"]]
@@ -106,7 +117,10 @@ class GalleryHandler(BaseHTTPRequestHandler):
                 except (RobloxAPIError, TypeError, ValueError):
                     return int(item.get("id") or 0), None
 
-            with ThreadPoolExecutor(max_workers=3) as pool:
+            # A keyword search should not trigger 120 RAP requests. Enrich a
+            # small sample only; the background scanner fills the saved catalog.
+            items = items[:12]
+            with ThreadPoolExecutor(max_workers=2) as pool:
                 rap_results = list(pool.map(fetch_rap, items))
             rap_by_id = dict(rap_results)
             items = [
