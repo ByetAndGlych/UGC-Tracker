@@ -35,7 +35,7 @@ dialog::backdrop{background:#000b}.modal-head{position:sticky;top:0;background:#
 <body>
 <header><div class="wrap">
 <h1>UGC-Tracker</h1><div class="sub">Roblox collectible catalog · Live public data</div>
-<form class="controls" id="search"><input id="keyword" type="search" placeholder="Search items…" aria-label="Search items"><select id="limit" aria-label="Number of results"><option>10</option><option>30</option><option>60</option><option>120</option></select><button type="submit">Search</button></form>
+<form class="controls" id="search"><input id="keyword" type="search" placeholder="Search items…" aria-label="Search items"><select id="limit" aria-label="Number of results"><option>120</option><option>60</option><option>30</option><option>10</option></select><button type="submit">Search</button></form>
 <div class="controls" style="margin-top:9px"><label for="sort" class="sub" style="align-self:center;white-space:nowrap">Sort by</label><select id="sort" aria-label="Sort items" style="flex:1"><option value="deal" selected>Best deal vs RAP</option><option value="price-low">Lowest price</option><option value="price-high">Highest price</option><option value="rap">Highest RAP</option><option value="name">Name A–Z</option><option value="markup">Biggest markup vs RAP</option></select></div>
 </div></header>
 <main><div class="status" id="status">Loading collectible items…</div><section class="grid" id="items" aria-live="polite"></section></main>
@@ -100,7 +100,7 @@ async function showDetails(item){
 async function load(isAutomatic=false){
  status.textContent='Contacting Roblox…';grid.innerHTML='';
  const params=new URLSearchParams({keyword:document.getElementById('keyword').value,limit:document.getElementById('limit').value});
- try{const response=await fetch('/api/items?'+params);const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not load items');currentItems=data.items||[];render();status.textContent='Showing '+data.count+' live catalog item(s).';}
+ try{const response=await fetch('/api/items?'+params);const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not load items');currentItems=data.items||[];render();if(data.source==='continuous-scanner' && data.count===0){const scan=await fetch('/api/scanner').then(r=>r.json());status.textContent='Scanner starting: '+scan.status+'. Items will appear as Roblox pages are scanned.';}else if(data.source==='continuous-scanner'){const scan=await fetch('/api/scanner').then(r=>r.json());status.textContent='Showing '+data.count+' best-ranked scanned items · '+scan.items_scanned+' total collected · '+scan.status;}else{status.textContent='Showing '+data.count+' live search result(s).';}}
  catch(error){
   if(isAutomatic){status.textContent='Roblox is taking a moment. Retrying…';setTimeout(()=>load(true),2500);return;}
   status.textContent='Could not load the catalog: '+error.message;grid.innerHTML='<div class="empty">Try again in a moment.</div>';
