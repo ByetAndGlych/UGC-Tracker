@@ -140,11 +140,34 @@ class RobloxCatalogClient:
         }
 
     def get_resale_data(self, asset_id: int, collectible_item_id: str | None = None) -> dict[str, Any]:
-        """Fetch resale data, preferring the modern collectible-ID endpoint."""
-        if collectible_item_id:
-            return self._get_json(
-                f"{RESELLERS_URL}/{collectible_item_id}/resale-data", {}
-            )
+        """Fetch RAP through Roblox's current collectible endpoint when possible.
+
+        Catalog search responses do not always include collectibleItemId.
+        Resolve it through economy v2 before falling back to the legacy
+        asset resale endpoint (which can return null RAP for migrated items).
+        """
+        item_id = collectible_item_id
+        if not item_id:
+            try:
+                details = self.get_asset_details(int(asset_id))
+                item_id = details.get("CollectibleItemId") or details.get("collectibleItemId")
+                if not item_id:
+                    collectible_details = details.get("CollectiblesItemDetails") or {}
+                    if isinstance(collectible_details, dict):
+                        item_id = (
+                            collectible_details.get("CollectibleItemId")
+                            or collectible_details.get("collectibleItemId")
+                        )
+            except RobloxAPIError:
+                item_id = None
+
+        if item_id:
+            data = self._get_json(f"{RESELLERS_URL}/{item_id}/resale-data", {})
+            rap = data.get("recentAveragePrice")
+            if isinstance(rap, (int, float)) and rap > 0:
+                return data
+
+        # Legacy limiteds may still use the asset-ID resale endpoint.
         return self._get_json(f"{ECONOMY_URL}/{int(asset_id)}/resale-data", {})
 
     def get_asset_details(self, asset_id: int) -> dict[str, Any]:
