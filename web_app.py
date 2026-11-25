@@ -133,18 +133,9 @@ class GalleryHandler(BaseHTTPRequestHandler):
             for item in items:
                 try:
                     item["rap"] = rap_by_id.get(int(item["id"]))
+                    self.item_cache[int(item["id"])] = item
                 except (TypeError, ValueError):
-                    item["rap"] = None
-            # Search results follow the same strict below-RAP rule as scanner results.
-            items = [
-                item for item in items
-                if isinstance(item.get("lowest_price"), (int, float))
-                and isinstance(item.get("rap"), (int, float))
-                and item["rap"] > 0
-                and 0 < item["lowest_price"] < item["rap"]
-            ]
-            for item in items:
-                self.item_cache[int(item["id"])] = item
+                    pass
             thumbnails = self.client.get_asset_thumbnails(
                 [item["id"] for item in items if item.get("id")]
             )
