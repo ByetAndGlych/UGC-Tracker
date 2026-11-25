@@ -97,8 +97,8 @@ class RobloxCatalogClient:
 
         for _ in range(max_pages):
             params: dict[str, Any] = {
-                "CategoryFilter": 2,
-                "SalesTypeFilter": 1,
+                "CategoryFilter": 0,
+                "SalesTypeFilter": 2,
                 "SortType": sort_type,
                 "limit": limit,
             }
@@ -124,7 +124,7 @@ class RobloxCatalogClient:
         if limit not in (10, 28, 30, 60, 120):
             raise ValueError("limit must be 10, 28, 30, 60, or 120")
         params: dict[str, Any] = {
-            "CategoryFilter": 2, "SalesTypeFilter": 1, "SortType": sort_type, "limit": limit
+            "CategoryFilter": 0, "SalesTypeFilter": 2, "SortType": sort_type, "limit": limit
         }
         if keyword.strip():
             params["Keyword"] = keyword.strip()
