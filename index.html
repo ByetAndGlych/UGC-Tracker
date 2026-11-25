@@ -67,8 +67,9 @@ async function showDetails(item){
  try{
   const detailUrl='/api/items/'+encodeURIComponent(item.id)+'?item='+encodeURIComponent(JSON.stringify(item));const response=await fetch(detailUrl);const d=await response.json();if(!response.ok)throw new Error(d.error||'Could not load details');
   const x=d.item||{},rap=d.rap,discount=percentOff(x.lowest_price,rap),url=itemUrl(x.id);
+  const soldCount=d.sales!==null&&d.sales!==undefined&&d.sales!==''?Number(d.sales).toLocaleString():'NA';
   const remainingTotal=d.remaining!==null&&d.remaining!==undefined&&d.stock!==null&&d.stock!==undefined?Number(d.remaining).toLocaleString()+' / '+Number(d.stock).toLocaleString():'NA';
-  const cells=[['Lowest price',robux(x.lowest_price)],['RAP',robux(rap)],['Discount vs RAP',discount],['Creator price',robux(x.creator_price)],['Lowest resale',robux(x.resale_price)],['Original price',robux(x.raw?.originalPrice)],['Copies remaining (remaining / total)',remainingTotal]];
+  const cells=[['Lowest price',robux(x.lowest_price)],['RAP',robux(rap)],['Discount vs RAP',discount],['Creator price',robux(x.creator_price)],['Lowest resale',robux(x.resale_price)],['Copies sold',soldCount],['Original price',robux(x.raw?.originalPrice)],['Copies remaining (remaining / total)',remainingTotal]];
   let html=(x.thumbnail_url?'<img class="detail-image" src="'+esc(x.thumbnail_url)+'" alt="">':'')+'<div class="detail-grid">'+cells.map(c=>'<div class="detail-cell"><span>'+esc(c[0])+'</span><strong>'+esc(c[1])+'</strong></div>').join('')+'</div>';
   html+='<div class="detail-section"><h3>Creator</h3><p>'+esc(x.creator_name||'NA')+'</p><p class="muted">'+esc(x.description||'No description available.')+'</p></div>';
   html+='<div class="detail-section"><h3>Resale listings</h3>';
