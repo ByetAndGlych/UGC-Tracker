@@ -334,6 +334,7 @@ def normalize_catalog_item(item: dict[str, Any]) -> dict[str, Any]:
         "price_type": price_type,
         "is_limited": item.get("isLimited"),
         "is_limited_unique": item.get("isLimitedUnique"),
+        "total_quantity": item.get("totalQuantity"),
         "collectible_item_id": item.get("collectibleItemId"),
         "thumbnail": item.get("thumbnail"),
         "has_resellers": has_resellers,
