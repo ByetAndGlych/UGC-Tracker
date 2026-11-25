@@ -2,41 +2,49 @@
 
 A standalone Roblox Limited UGC price-tracking and deal-detection project.
 
-## Current milestone: public catalog search
+## Current milestone: live visual catalog gallery
 
-The first working component is a read-only client for Roblox's avatar Marketplace catalog search endpoint.
+The project now includes a phone-friendly web gallery that searches Roblox collectible items and loads their real thumbnails through Roblox's public Thumbnails API.
 
-- Searches collectible catalog items.
-- Supports keyword search and cursor-based pagination.
-- Handles HTTP 429 and temporary 5xx responses with bounded retries.
-- Normalizes useful item fields while preserving the original API response.
-- Uses public catalog data only; it does not ask for or store a Roblox password or session cookie.
+- Search by item name.
+- Choose 10, 30, 60, or 120 results.
+- View item thumbnails, names, creators, and available price fields.
+- Uses public read-only endpoints; no Roblox password or session cookie is needed.
+- The gallery is a small Python web server and does not require a paid framework.
 
 ## Run locally
 
 ```bash
 python -m pip install -r requirements.txt
-python app.py
-python app.py --keyword "limited" --limit 10 --pages 2
+python web_app.py
 ```
 
-The command prints the catalog response as JSON. Roblox may change experimental API behavior, and fields can be absent for some items.
+Open http://127.0.0.1:8000 in a browser on the same computer.
+
+To test the live catalog and thumbnail endpoints:
+
+```bash
+python web_app.py --check
+python -m unittest -v
+```
+
+## Current limitations
+
+- The gallery displays catalog price fields when Roblox supplies them. It does not yet calculate RAP, verified resale comparisons, or price history.
+- Some catalog items may not have a thumbnail or public creator field.
+- To open the gallery from a phone when the server is running elsewhere, it must be deployed to a public host. Hosting/deployment is a separate next step.
 
 ## Next milestones
 
-1. Verify collectible item search against live responses.
-2. Validate the current public item-details and resale/RAP endpoints.
+1. Validate live thumbnail retrieval in GitHub Actions.
+2. Verify public resale and RAP endpoints.
 3. Store timestamped observations in SQLite.
-4. Calculate 7-day and 30-day averages and sales/listing metrics where data is publicly available.
-5. Add a deal score that weighs listing price, RAP, averages, and sales volume rather than treating RAP as true market value.
-6. Add a dashboard and scheduled polling after the data layer is reliable.
+4. Calculate 7-day and 30-day averages and sales/listing metrics where public data permits.
+5. Add deal scoring based on price history and sales volume.
+6. Deploy the gallery so it can be opened from a phone and run continuously.
 
-## API reference
+## Roblox API references
 
-Roblox documents Marketplace search at:
-https://create.roblox.com/docs/projects/assets/api
-
-The catalog search endpoint used here is:
-https://catalog.roblox.com/v1/search/items/details
-
-Resale and RAP retrieval are intentionally not represented as complete yet. Those endpoints will be added only after their current response formats and access requirements are tested.
+- Catalog search: https://catalog.roblox.com/v2/search/items/details
+- Asset thumbnails: https://thumbnails.roblox.com/v1/assets
+- Roblox Creator Hub: https://create.roblox.com/docs/projects/assets/api
