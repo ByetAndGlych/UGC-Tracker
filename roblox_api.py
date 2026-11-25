@@ -117,8 +117,12 @@ class RobloxCatalogClient:
                 break
         return items
 
-    def get_resale_data(self, asset_id: int) -> dict[str, Any]:
-        """Fetch public RAP and 180-day resale history for a limited asset."""
+    def get_resale_data(self, asset_id: int, collectible_item_id: str | None = None) -> dict[str, Any]:
+        """Fetch resale data, preferring the modern collectible-ID endpoint."""
+        if collectible_item_id:
+            return self._get_json(
+                f"{RESELLERS_URL}/{collectible_item_id}/resale-data", {}
+            )
         return self._get_json(f"{ECONOMY_URL}/{int(asset_id)}/resale-data", {})
 
     def get_resellers(self, collectible_item_id: str, limit: int = 10) -> dict[str, Any]:
