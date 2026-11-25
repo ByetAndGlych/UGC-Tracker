@@ -82,7 +82,9 @@ class CatalogScanner:
         now = datetime.now().astimezone()
         rap_candidates = [
             item for item in items
-            if not isinstance(item.get("rap"), (int, float))
+            if isinstance(item.get("lowest_price"), (int, float))
+            and item["lowest_price"] > 0
+            and not isinstance(item.get("rap"), (int, float))
             and (
                 not item.get("rap_retry_after")
                 or item["rap_retry_after"] <= now.isoformat()
@@ -150,7 +152,9 @@ class CatalogScanner:
         for (payload,) in rows:
             item = json.loads(payload)
             rap_due = (
-                not isinstance(item.get("rap"), (int, float))
+                isinstance(item.get("lowest_price"), (int, float))
+                and item["lowest_price"] > 0
+                and not isinstance(item.get("rap"), (int, float))
                 and (not item.get("rap_retry_after") or item["rap_retry_after"] <= now)
             )
             thumbnail_due = (
