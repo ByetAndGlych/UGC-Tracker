@@ -224,6 +224,13 @@ class CatalogScanner:
         with self._connect() as db:
             rows = db.execute("SELECT payload FROM catalog_items").fetchall()
         items = [json.loads(row[0]) for row in rows]
+        # Only show items whose original total copy count is known and <= 1,000.
+        items = [
+            item for item in items
+            if isinstance(item.get("total_quantity"), (int, float))
+            and not isinstance(item.get("total_quantity"), bool)
+            and 0 <= item["total_quantity"] <= 1000
+        ]
         if keyword:
             # Keyword search is a catalog search, not a deal-only filter.
             # Keep matching items even when Roblox has not supplied RAP yet.
