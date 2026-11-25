@@ -63,7 +63,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the UGC-Tracker item gallery.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--check", action="store_true", help="Test live catalog and thumbnails")
     args = parser.parse_args()
+
+    if args.check:
+        client = RobloxCatalogClient()
+        items = client.search_collectibles(limit=10)
+        thumbnails = client.get_asset_thumbnails([item.get("id") for item in items if item.get("id")])
+        print(f"Retrieved {len(items)} collectible items; received {len(thumbnails)} thumbnails.")
+        return
+
     server = ThreadingHTTPServer((args.host, args.port), GalleryHandler)
     print(f"UGC-Tracker gallery running at http://{args.host}:{args.port}")
     print("Press Ctrl+C to stop.")
