@@ -122,15 +122,15 @@ class CatalogScanner:
         with self._connect() as db:
             rows = db.execute("SELECT payload FROM catalog_items").fetchall()
         items = [json.loads(row[0]) for row in rows]
-        # Hide confirmed above-RAP listings; retain items until RAP is available.
+        # Only show items with a known RAP, a known price, and a non-zero discount.
+        # Hide above-RAP, equal-to-RAP (0.0%), and missing-RAP items.
         items = [
             item for item in items
-            if not (
-                isinstance(item.get("lowest_price"), (int, float))
-                and isinstance(item.get("rap"), (int, float))
-                and item["rap"] > 0
-                and item["lowest_price"] > item["rap"]
-            )
+            if isinstance(item.get("lowest_price"), (int, float))
+            and isinstance(item.get("rap"), (int, float))
+            and item["rap"] > 0
+            and 0 < item["lowest_price"] < item["rap"]
+            and round((1 - item["lowest_price"] / item["rap"]) * 100, 1) > 0
         ]
         if keyword:
             term = keyword.casefold()
