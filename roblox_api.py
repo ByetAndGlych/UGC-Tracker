@@ -125,6 +125,10 @@ class RobloxCatalogClient:
             )
         return self._get_json(f"{ECONOMY_URL}/{int(asset_id)}/resale-data", {})
 
+    def get_asset_details(self, asset_id: int) -> dict[str, Any]:
+        """Fetch public economy details, including Sales, Remaining and collectible quantity."""
+        return self._get_json(f"https://economy.roblox.com/v2/assets/{int(asset_id)}/details", {})
+
     def get_resellers(self, collectible_item_id: str, limit: int = 10) -> dict[str, Any]:
         """Fetch currently listed copies for a collectible item."""
         if not collectible_item_id:
