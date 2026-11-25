@@ -26,6 +26,9 @@ class GalleryHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/health":
+            self._send(200, b"ok", "text/plain; charset=utf-8")
+            return
         if parsed.path == "/":
             self._send(200, (ROOT / "index.html").read_bytes(), "text/html; charset=utf-8")
             return
