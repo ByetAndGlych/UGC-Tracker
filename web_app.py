@@ -9,9 +9,11 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from roblox_api import RobloxAPIError, RobloxCatalogClient, normalize_catalog_item
+from scanner import CatalogScanner
 
 
 ROOT = Path(__file__).parent
+SCANNER = CatalogScanner()
 
 
 class GalleryHandler(BaseHTTPRequestHandler):
@@ -28,6 +30,9 @@ class GalleryHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/api/scanner":
+            self._send(200, json.dumps(SCANNER.status()).encode(), "application/json; charset=utf-8")
+            return
         if parsed.path == "/health":
             self._send(200, b"ok", "text/plain; charset=utf-8")
             return
@@ -103,6 +108,11 @@ class GalleryHandler(BaseHTTPRequestHandler):
             limit = int(query.get("limit", ["30"])[0])
             if limit not in (10, 28, 30, 60, 120):
                 raise ValueError
+            if not keyword.strip():
+                items = SCANNER.get_items(limit=limit)
+                payload = json.dumps({"items": items, "count": len(items), "source": "continuous-scanner"}).encode()
+                self._send(200, payload, "application/json; charset=utf-8")
+                return
             raw_items = self.client.search_collectibles(keyword=keyword, limit=limit)
             items = [normalize_catalog_item(item) for item in raw_items]
             items = [item for item in items if item["is_for_sale"]]
@@ -158,6 +168,7 @@ def main() -> None:
         print(f"Retrieved {len(items)} collectible items; received {len(thumbnails)} thumbnails.")
         return
 
+    SCANNER.start()
     server = ThreadingHTTPServer((args.host, args.port), GalleryHandler)
     print(f"UGC-Tracker gallery running at http://{args.host}:{args.port}")
     print("Press Ctrl+C to stop.")
@@ -167,6 +178,7 @@ def main() -> None:
         pass
     finally:
         server.server_close()
+        SCANNER.stop()
 
 
 if __name__ == "__main__":
