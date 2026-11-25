@@ -1,7 +1,7 @@
 """Read-only client for Roblox's public avatar Marketplace catalog API.
 
-This first milestone deliberately implements catalog search only. Resale/RAP
-endpoints are kept out until their current public behavior is verified.
+Catalog search and thumbnail lookup are public GET requests. Resale/RAP
+endpoints are intentionally separate until their current behavior is verified.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import requests
 
 
 CATALOG_SEARCH_URL = "https://catalog.roblox.com/v2/search/items/details"
+THUMBNAILS_URL = "https://thumbnails.roblox.com/v1/assets"
 DEFAULT_TIMEOUT = 20
 MAX_RETRIES = 4
 
@@ -32,7 +33,7 @@ class RobloxCatalogClient:
         self.max_retries = max_retries
         self.session.headers.update(
             {
-                "User-Agent": "UGC-Tracker/0.1 (read-only public catalog client)",
+                "User-Agent": "UGC-Tracker/0.2 (read-only public catalog client)",
                 "Accept": "application/json",
             }
         )
@@ -83,11 +84,7 @@ class RobloxCatalogClient:
         sort_type: int = 0,
         max_pages: int = 1,
     ) -> list[dict[str, Any]]:
-        """Search collectible catalog items; returns raw item dictionaries.
-
-        The v2 endpoint uses CategoryFilter=2 for Collectibles and supports
-        limits of 10, 28, 30, 60, or 120. Pagination uses nextPageCursor.
-        """
+        """Search collectible catalog items; returns raw item dictionaries."""
         if limit not in (10, 28, 30, 60, 120):
             raise ValueError("limit must be 10, 28, 30, 60, or 120")
         if max_pages < 1:
@@ -98,8 +95,8 @@ class RobloxCatalogClient:
 
         for _ in range(max_pages):
             params: dict[str, Any] = {
-                "CategoryFilter": 2,  # Collectibles
-                "SalesTypeFilter": 2,  # Collectible resale items
+                "CategoryFilter": 2,
+                "SalesTypeFilter": 2,
                 "SortType": sort_type,
                 "limit": limit,
             }
@@ -112,29 +109,61 @@ class RobloxCatalogClient:
             page_items = payload.get("data", [])
             if not isinstance(page_items, list):
                 raise RobloxAPIError("Catalog response did not contain an item list in 'data'.")
-
             items.extend(item for item in page_items if isinstance(item, dict))
             cursor = payload.get("nextPageCursor")
             if not cursor:
                 break
-
         return items
+
+    def get_asset_thumbnails(self, asset_ids: list[int]) -> dict[int, str]:
+        """Return Roblox thumbnail URLs keyed by asset ID."""
+        ids = [int(asset_id) for asset_id in asset_ids if asset_id]
+        if not ids:
+            return {}
+        result: dict[int, str] = {}
+        # Roblox's thumbnail endpoint accepts batches; keep requests bounded.
+        for start in range(0, len(ids), 50):
+            batch = ids[start:start + 50]
+            payload = self._get_json(
+                THUMBNAILS_URL,
+                {
+                    "assetIds": ",".join(str(asset_id) for asset_id in batch),
+                    "returnPolicy": "PlaceHolder",
+                    "size": "420x420",
+                    "format": "Png",
+                    "isCircular": "false",
+                },
+            )
+            for entry in payload.get("data", []):
+                if not isinstance(entry, dict):
+                    continue
+                try:
+                    asset_id = int(entry.get("targetId"))
+                except (TypeError, ValueError):
+                    continue
+                image_url = entry.get("imageUrl")
+                if image_url:
+                    result[asset_id] = image_url
+        return result
 
 
 def normalize_catalog_item(item: dict[str, Any]) -> dict[str, Any]:
-    """Return a stable, display-friendly subset without discarding raw fields."""
+    """Return display-friendly fields while preserving the original response."""
     creator = item.get("creator") or {}
+    if not isinstance(creator, dict):
+        creator = {}
     return {
         "id": item.get("id"),
         "name": item.get("name"),
         "description": item.get("description"),
-        "creator_name": creator.get("name") if isinstance(creator, dict) else None,
-        "creator_id": creator.get("id") if isinstance(creator, dict) else None,
+        "creator_name": creator.get("name") or item.get("creatorName"),
+        "creator_id": creator.get("id") or item.get("creatorTargetId"),
         "price": item.get("price"),
-        "lowest_price": item.get("lowestPrice"),
+        "lowest_price": item.get("lowestResalePrice") or item.get("lowestPrice"),
         "is_limited": item.get("isLimited"),
         "is_limited_unique": item.get("isLimitedUnique"),
         "collectible_item_id": item.get("collectibleItemId"),
         "thumbnail": item.get("thumbnail"),
+        "has_resellers": item.get("hasResellers"),
         "raw": item,
     }
